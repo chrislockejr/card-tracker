@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Tracker</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark px-3">
+  <span class="navbar-brand fw-bold"><i class="bi bi-collection"></i> Card Tracker</span>
+  <div class="d-flex gap-2 align-items-center" id="nav-stats"></div>
+</nav>
+
+<div class="container-fluid py-3">
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-3" id="mainTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
+  </ul>
+
+  <!-- Wrestling Tab -->
+  <div id="tab-wrestling">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-sm-3"><input class="form-control form-control-sm" id="w-search" placeholder="Search wrestler..."></div>
+      <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-brand" placeholder="Filter brand..."></div>
+      <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-type" placeholder="Filter card type..."></div>
+      <div class="col-sm-auto">
+        <button class="btn btn-sm btn-primary" onclick="openAddModal('wrestling')"><i class="bi bi-plus-lg"></i> Add Card</button>
+        <button class="btn btn-sm btn-success" onclick="exportCSV('wrestling')"><i class="bi bi-download"></i> Export CSV</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="openImport('wrestling')"><i class="bi bi-upload"></i> Import CSV</button>
+      </div>
+    </div>
+    <div class="summary-bar mb-2" id="w-summary"></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover table-striped align-middle" id="w-table">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th class="sortable" data-col="wrestler_name" data-tab="wrestling">Wrestler <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="brand" data-tab="wrestling">Brand <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_type" data-tab="wrestling">Card Type <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_number" data-tab="wrestling">Card # <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="cost" data-tab="wrestling">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="current_value" data-tab="wrestling">Value <i class="bi bi-arrow-down-up"></i></th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="w-tbody"></tbody>
+      </table>
+    </div>
+    <div id="w-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
+  <!-- Soccer Tab -->
+  <div id="tab-soccer" class="d-none">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-sm-3"><input class="form-control form-control-sm" id="s-search" placeholder="Search player..."></div>
+      <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-team" placeholder="Filter team..."></div>
+      <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-type" placeholder="Filter card type..."></div>
+      <div class="col-sm-auto">
+        <button class="btn btn-sm btn-primary" onclick="openAddModal('soccer')"><i class="bi bi-plus-lg"></i> Add Card</button>
+        <button class="btn btn-sm btn-success" onclick="exportCSV('soccer')"><i class="bi bi-download"></i> Export CSV</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="openImport('soccer')"><i class="bi bi-upload"></i> Import CSV</button>
+      </div>
+    </div>
+    <div class="summary-bar mb-2" id="s-summary"></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover table-striped align-middle" id="s-table">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th class="sortable" data-col="player_name" data-tab="soccer">Player <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="team" data-tab="soccer">Team <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="league" data-tab="soccer">League <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_type" data-tab="soccer">Card Type <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_number" data-tab="soccer">Card # <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="year" data-tab="soccer">Year <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="cost" data-tab="soccer">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="current_value" data-tab="soccer">Value <i class="bi bi-arrow-down-up"></i></th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="s-tbody"></tbody>
+      </table>
+    </div>
+    <div id="s-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
+  <!-- Portfolio Tab -->
+  <div id="tab-portfolio" class="d-none">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-header fw-bold">Portfolio Summary</div>
+          <div class="card-body" id="portfolio-summary"></div>
+        </div>
+      </div>
+      <div class="col-md-8">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Value Over Time</span>
+            <select class="form-select form-select-sm w-auto" id="chart-filter">
+              <option value="all">All Cards</option>
+              <option value="wrestling">Wrestling</option>
+              <option value="soccer">Soccer</option>
+            </select>
+          </div>
+          <div class="card-body"><canvas id="portfolioChart" height="120"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="cardModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Add Card</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Value History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="historyTitle">Value History</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <canvas id="historyChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import CSV</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">CSV must have headers matching the export format.</p>
+        <input type="file" class="form-control" id="importFile" accept=".csv">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="importSave">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

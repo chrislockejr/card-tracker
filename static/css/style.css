@@ -1,0 +1,24 @@
+body { background: #f8f9fa; font-size: 0.875rem; }
+
+.table th { white-space: nowrap; font-size: 0.8rem; }
+.table td { vertical-align: middle; }
+.table td.notes-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { background: rgba(255,255,255,0.1); }
+.sort-active { color: #ffc107 !important; }
+
+.summary-bar { font-size: 0.82rem; color: #555; }
+.summary-bar span { margin-right: 1.2rem; }
+.gain { color: #198754; font-weight: 600; }
+.loss { color: #dc3545; font-weight: 600; }
+
+.btn-xs { padding: 0.1rem 0.4rem; font-size: 0.72rem; }
+.action-btns { white-space: nowrap; }
+
+.nav-stats-item { font-size: 0.78rem; color: #ccc; }
+.nav-stats-item strong { color: #fff; }
+
+.per-page-select { width: 70px; }
+
+#portfolioChart, #historyChart { max-height: 340px; }
