@@ -84,9 +84,11 @@ function setupSearch() {
   };
 
   document.getElementById("w-search").addEventListener("input",      debounce(() => { state.wrestling.page = 1; loadWrestling(); }, 300));
+  document.getElementById("w-filter-set").addEventListener("input",   debounce(() => { state.wrestling.page = 1; loadWrestling(); }, 300));
   document.getElementById("w-filter-brand").addEventListener("input", debounce(() => { state.wrestling.page = 1; loadWrestling(); }, 300));
   document.getElementById("w-filter-type").addEventListener("input",  debounce(() => { state.wrestling.page = 1; loadWrestling(); }, 300));
   document.getElementById("s-search").addEventListener("input",       debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
+  document.getElementById("s-filter-set").addEventListener("input",   debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
   document.getElementById("s-filter-team").addEventListener("input",  debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
   document.getElementById("s-filter-type").addEventListener("input",  debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
 
@@ -116,6 +118,7 @@ async function loadWrestling() {
   const s = state.wrestling;
   const params = new URLSearchParams({
     q:         document.getElementById("w-search").value,
+    set_name:  document.getElementById("w-filter-set").value,
     brand:     document.getElementById("w-filter-brand").value,
     card_type: document.getElementById("w-filter-type").value,
     sort: s.sort, dir: s.dir, page: s.page, per_page: s.perPage,
@@ -143,6 +146,7 @@ function renderWrestlingTable(data) {
 
     return `<tr>
       <td><strong>${esc(c.wrestler_name)}</strong></td>
+      <td>${esc(c.set_name)}</td>
       <td>${esc(c.brand)}</td>
       <td>${esc(c.card_type)}</td>
       <td>${esc(c.card_number)}</td>
@@ -169,6 +173,7 @@ async function loadSoccer() {
   const s = state.soccer;
   const params = new URLSearchParams({
     q:         document.getElementById("s-search").value,
+    set_name:  document.getElementById("s-filter-set").value,
     team:      document.getElementById("s-filter-team").value,
     card_type: document.getElementById("s-filter-type").value,
     sort: s.sort, dir: s.dir, page: s.page, per_page: s.perPage,
@@ -194,6 +199,7 @@ function renderSoccerTable(data) {
 
     return `<tr>
       <td><strong>${esc(c.player_name)}</strong></td>
+      <td>${esc(c.set_name)}</td>
       <td>${esc(c.team)}</td>
       <td>${esc(c.league)}</td>
       <td>${esc(c.card_type)}</td>
@@ -363,6 +369,17 @@ function wrestlingForm(c) {
         <input class="form-control" id="f-wrestler_name" value="${esc(c.wrestler_name||"")}">
       </div>
       <div class="col-md-6">
+        <label class="form-label">Set</label>
+        <input class="form-control" id="f-set_name" list="w-set-list" value="${esc(c.set_name||"")}">
+        <datalist id="w-set-list">
+          <option value="Topps Chrome WWE 2026">
+          <option value="Upper Deck AEW Allure 2026">
+          <option value="Topps Chrome WWE 2025">
+          <option value="Topps WWE 2025">
+          <option value="Panini Prizm WWE 2024">
+        </datalist>
+      </div>
+      <div class="col-md-6">
         <label class="form-label">Brand</label>
         <input class="form-control" id="f-brand" list="brand-list" value="${esc(c.brand||"")}">
         <datalist id="brand-list">
@@ -405,6 +422,17 @@ function soccerForm(c) {
       <div class="col-md-6">
         <label class="form-label">Player Name *</label>
         <input class="form-control" id="f-player_name" value="${esc(c.player_name||"")}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Set</label>
+        <input class="form-control" id="f-set_name" list="s-set-list" value="${esc(c.set_name||"")}">
+        <datalist id="s-set-list">
+          <option value="Donruss Road to World Cup 25-26">
+          <option value="Topps Chrome UEFA Champions League 2025">
+          <option value="Panini Prizm FIFA World Cup 2026">
+          <option value="Topps Chrome MLS 2025">
+          <option value="Panini Donruss Soccer 2025">
+        </datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label">Team</label>
@@ -453,6 +481,7 @@ async function saveCard() {
   const type = state.editType;
   const body = type === "wrestling" ? {
     wrestler_name: document.getElementById("f-wrestler_name").value.trim(),
+    set_name:      document.getElementById("f-set_name").value.trim(),
     brand:         document.getElementById("f-brand").value.trim(),
     card_type:     document.getElementById("f-card_type").value.trim(),
     card_number:   document.getElementById("f-card_number").value.trim(),
@@ -461,6 +490,7 @@ async function saveCard() {
     notes:         document.getElementById("f-notes").value.trim(),
   } : {
     player_name:   document.getElementById("f-player_name").value.trim(),
+    set_name:      document.getElementById("f-set_name").value.trim(),
     team:          document.getElementById("f-team").value.trim(),
     league:        document.getElementById("f-league").value.trim(),
     card_type:     document.getElementById("f-card_type").value.trim(),

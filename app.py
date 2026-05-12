@@ -9,6 +9,7 @@ import io
 from datetime import date, datetime
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cards.db"
@@ -24,6 +25,7 @@ class WrestlingCard(db.Model):
     __tablename__ = "wrestling_cards"
     id            = db.Column(db.Integer, primary_key=True)
     wrestler_name = db.Column(db.String(200), nullable=False)
+    set_name      = db.Column(db.String(200))   # e.g. Topps Chrome WWE 2026
     brand         = db.Column(db.String(100))   # Raw, SmackDown, AEW, etc.
     card_type     = db.Column(db.String(100))   # Base, Refractor, Auto, etc.
     card_number   = db.Column(db.String(50))    # e.g. "12/25" for numbered cards
@@ -47,6 +49,7 @@ class SoccerCard(db.Model):
     __tablename__ = "soccer_cards"
     id            = db.Column(db.Integer, primary_key=True)
     player_name   = db.Column(db.String(200), nullable=False)
+    set_name      = db.Column(db.String(200))   # e.g. Donruss Road to World Cup 25-26
     team          = db.Column(db.String(100))
     league        = db.Column(db.String(100))   # Premier League, La Liga, etc.
     card_type     = db.Column(db.String(100))
@@ -103,6 +106,7 @@ def wrestling_to_dict(c):
     return {
         "id": c.id, "type": "wrestling",
         "wrestler_name": c.wrestler_name,
+        "set_name": c.set_name or "",
         "brand": c.brand or "",
         "card_type": c.card_type or "",
         "card_number": c.card_number or "",
@@ -119,6 +123,7 @@ def soccer_to_dict(c):
     return {
         "id": c.id, "type": "soccer",
         "player_name": c.player_name,
+        "set_name": c.set_name or "",
         "team": c.team or "",
         "league": c.league or "",
         "card_type": c.card_type or "",
@@ -149,6 +154,7 @@ def list_wrestling():
     the current page) so the summary bar stays accurate while filtering.
     """
     q         = request.args.get("q", "").strip()
+    set_name  = request.args.get("set_name", "").strip()
     brand     = request.args.get("brand", "").strip()
     card_type = request.args.get("card_type", "").strip()
     sort      = request.args.get("sort", "wrestler_name")
@@ -159,6 +165,8 @@ def list_wrestling():
     query = WrestlingCard.query
     if q:
         query = query.filter(WrestlingCard.wrestler_name.ilike(f"%{q}%"))
+    if set_name:
+        query = query.filter(WrestlingCard.set_name.ilike(f"%{set_name}%"))
     if brand:
         query = query.filter(WrestlingCard.brand.ilike(f"%{brand}%"))
     if card_type:
@@ -166,6 +174,7 @@ def list_wrestling():
 
     col_map = {
         "wrestler_name": WrestlingCard.wrestler_name,
+        "set_name":      WrestlingCard.set_name,
         "brand":         WrestlingCard.brand,
         "card_type":     WrestlingCard.card_type,
         "card_number":   WrestlingCard.card_number,
@@ -195,6 +204,7 @@ def create_wrestling():
     d = request.json
     c = WrestlingCard(
         wrestler_name=d["wrestler_name"],
+        set_name=d.get("set_name", ""),
         brand=d.get("brand", ""),
         card_type=d.get("card_type", ""),
         card_number=d.get("card_number", ""),
@@ -220,6 +230,7 @@ def update_wrestling(card_id):
     c = WrestlingCard.query.get_or_404(card_id)
     d = request.json
     c.wrestler_name = d.get("wrestler_name", c.wrestler_name)
+    c.set_name      = d.get("set_name", c.set_name)
     c.brand         = d.get("brand", c.brand)
     c.card_type     = d.get("card_type", c.card_type)
     c.card_number   = d.get("card_number", c.card_number)
@@ -263,6 +274,7 @@ def list_soccer():
     Mirrors the wrestling endpoint — see list_wrestling() for full comments.
     """
     q         = request.args.get("q", "").strip()
+    set_name  = request.args.get("set_name", "").strip()
     team      = request.args.get("team", "").strip()
     card_type = request.args.get("card_type", "").strip()
     sort      = request.args.get("sort", "player_name")
@@ -273,6 +285,8 @@ def list_soccer():
     query = SoccerCard.query
     if q:
         query = query.filter(SoccerCard.player_name.ilike(f"%{q}%"))
+    if set_name:
+        query = query.filter(SoccerCard.set_name.ilike(f"%{set_name}%"))
     if team:
         query = query.filter(SoccerCard.team.ilike(f"%{team}%"))
     if card_type:
@@ -280,6 +294,7 @@ def list_soccer():
 
     col_map = {
         "player_name":   SoccerCard.player_name,
+        "set_name":      SoccerCard.set_name,
         "team":          SoccerCard.team,
         "league":        SoccerCard.league,
         "card_type":     SoccerCard.card_type,
@@ -310,6 +325,7 @@ def create_soccer():
     d = request.json
     c = SoccerCard(
         player_name=d["player_name"],
+        set_name=d.get("set_name", ""),
         team=d.get("team", ""),
         league=d.get("league", ""),
         card_type=d.get("card_type", ""),
@@ -332,6 +348,7 @@ def update_soccer(card_id):
     c = SoccerCard.query.get_or_404(card_id)
     d = request.json
     c.player_name = d.get("player_name", c.player_name)
+    c.set_name    = d.get("set_name", c.set_name)
     c.team        = d.get("team", c.team)
     c.league      = d.get("league", c.league)
     c.card_type   = d.get("card_type", c.card_type)
@@ -413,18 +430,18 @@ def export_csv(card_type):
     si = io.StringIO()
     if card_type == "wrestling":
         writer = csv.writer(si)
-        writer.writerow(["ID", "Wrestler Name", "Brand", "Card Type", "Card Number",
+        writer.writerow(["ID", "Wrestler Name", "Set", "Brand", "Card Type", "Card Number",
                          "Cost", "Value", "Notes", "Created At"])
         for c in WrestlingCard.query.order_by(WrestlingCard.wrestler_name).all():
-            writer.writerow([c.id, c.wrestler_name, c.brand, c.card_type, c.card_number,
+            writer.writerow([c.id, c.wrestler_name, c.set_name, c.brand, c.card_type, c.card_number,
                              c.cost, c.current_value, c.notes, c.created_at.date()])
         filename = "wrestling_cards.csv"
     elif card_type == "soccer":
         writer = csv.writer(si)
-        writer.writerow(["ID", "Player Name", "Team", "League", "Card Type", "Card Number",
+        writer.writerow(["ID", "Player Name", "Set", "Team", "League", "Card Type", "Card Number",
                          "Year", "Cost", "Value", "Notes", "Created At"])
         for c in SoccerCard.query.order_by(SoccerCard.player_name).all():
-            writer.writerow([c.id, c.player_name, c.team, c.league, c.card_type, c.card_number,
+            writer.writerow([c.id, c.player_name, c.set_name, c.team, c.league, c.card_type, c.card_number,
                              c.year, c.cost, c.current_value, c.notes, c.created_at.date()])
         filename = "soccer_cards.csv"
     else:
@@ -455,6 +472,7 @@ def import_csv(card_type):
         for row in reader:
             c = WrestlingCard(
                 wrestler_name=row.get("Wrestler Name", ""),
+                set_name=row.get("Set", ""),
                 brand=row.get("Brand", ""),
                 card_type=row.get("Card Type", ""),
                 card_number=row.get("Card Number", ""),
@@ -470,6 +488,7 @@ def import_csv(card_type):
         for row in reader:
             c = SoccerCard(
                 player_name=row.get("Player Name", ""),
+                set_name=row.get("Set", ""),
                 team=row.get("Team", ""),
                 league=row.get("League", ""),
                 card_type=row.get("Card Type", ""),
@@ -511,4 +530,13 @@ def stats():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        # Add set_name column to existing databases that predate this field.
+        # SQLite supports ALTER TABLE ADD COLUMN but not IF NOT EXISTS, so we
+        # check the schema manually first.
+        with db.engine.connect() as conn:
+            for table in ("wrestling_cards", "soccer_cards"):
+                existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})"))]
+                if "set_name" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN set_name VARCHAR(200)"))
+            conn.commit()
     app.run(debug=True, port=5000)
