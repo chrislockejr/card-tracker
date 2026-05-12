@@ -118,6 +118,32 @@
           <div class="card-body"><canvas id="portfolioChart" height="120"></canvas></div>
         </div>
       </div>
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Box Purchases</span>
+            <button class="btn btn-sm btn-primary" onclick="openBoxModal()"><i class="bi bi-plus-lg"></i> Log Box</button>
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Box Cost</th>
+                  <th>Cards</th>
+                  <th>Cost/Card</th>
+                  <th>Current Value</th>
+                  <th>P&amp;L</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="boxes-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -150,6 +176,50 @@
       </div>
       <div class="modal-body">
         <canvas id="historyChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Box Modal -->
+<div class="modal fade" id="boxModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="boxModalTitle">Log Box Purchase</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Name *</label>
+            <input class="form-control" id="b-name" placeholder="e.g. Topps Chrome WWE 2026 Blaster">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Type</label>
+            <select class="form-select" id="b-box_type">
+              <option value="Blaster Box">Blaster Box</option>
+              <option value="Hobby Box">Hobby Box</option>
+              <option value="Retail Pack">Retail Pack</option>
+              <option value="Hanger Box">Hanger Box</option>
+              <option value="Mega Box">Mega Box</option>
+              <option value="Collector Box">Collector Box</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Cost ($)</label>
+            <input class="form-control" type="number" step="0.01" id="b-cost" value="0">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="b-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="boxSave">Save</button>
       </div>
     </div>
   </div>

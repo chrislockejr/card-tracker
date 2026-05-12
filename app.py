@@ -31,6 +31,8 @@ class WrestlingCard(db.Model):
     card_number   = db.Column(db.String(50))    # e.g. "12/25" for numbered cards
     cost          = db.Column(db.Float, default=0.0)
     current_value = db.Column(db.Float, default=0.0)
+    source        = db.Column(db.String(50), default="Single")  # Single, Blaster Box, Hobby Box, etc.
+    box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -57,9 +59,24 @@ class SoccerCard(db.Model):
     year          = db.Column(db.Integer)
     cost          = db.Column(db.Float, default=0.0)
     current_value = db.Column(db.Float, default=0.0)
+    source        = db.Column(db.String(50), default="Single")
+    box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Box(db.Model):
+    """A box purchase (Blaster, Hobby, Retail Pack, etc.) that cards can be linked to.
+    Cost tracking for box-pulled cards works by dividing the box cost across
+    all cards linked to it; the app suggests this value when adding a card."""
+    __tablename__ = "boxes"
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)  # e.g. "Topps Chrome WWE 2026 Blaster"
+    box_type   = db.Column(db.String(50))                   # Blaster Box, Hobby Box, Retail Pack
+    cost       = db.Column(db.Float, default=0.0)
+    notes      = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class ValueHistory(db.Model):
@@ -112,6 +129,8 @@ def wrestling_to_dict(c):
         "card_number": c.card_number or "",
         "cost": c.cost,
         "current_value": c.current_value,
+        "source": c.source or "Single",
+        "box_id": c.box_id,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
@@ -131,9 +150,29 @@ def soccer_to_dict(c):
         "year": c.year or "",
         "cost": c.cost,
         "current_value": c.current_value,
+        "source": c.source or "Single",
+        "box_id": c.box_id,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
+    }
+
+
+def box_to_dict(b):
+    """Serialize a Box with live card stats (count and current value of linked cards)."""
+    w_cards = WrestlingCard.query.filter_by(box_id=b.id)
+    s_cards = SoccerCard.query.filter_by(box_id=b.id)
+    card_count  = w_cards.count() + s_cards.count()
+    total_value = (db.session.query(db.func.sum(WrestlingCard.current_value)).filter_by(box_id=b.id).scalar() or 0) \
+                + (db.session.query(db.func.sum(SoccerCard.current_value)).filter_by(box_id=b.id).scalar() or 0)
+    # Suggested cost per card = box cost divided by how many cards are already linked.
+    # When adding the next card the caller should use card_count + 1 as the divisor.
+    return {
+        "id": b.id, "name": b.name, "box_type": b.box_type or "",
+        "cost": b.cost, "notes": b.notes or "",
+        "created_at": b.created_at.isoformat() if b.created_at else "",
+        "card_count": card_count,
+        "total_value": round(total_value, 2),
     }
 
 
@@ -210,6 +249,8 @@ def create_wrestling():
         card_number=d.get("card_number", ""),
         cost=float(d.get("cost", 0)),
         current_value=float(d.get("current_value", 0)),
+        source=d.get("source", "Single"),
+        box_id=int(d["box_id"]) if d.get("box_id") else None,
         notes=d.get("notes", ""),
     )
     db.session.add(c)
@@ -239,6 +280,8 @@ def update_wrestling(card_id):
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("wrestling", c.id, new_value)
+    c.source     = d.get("source", c.source)
+    c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
     db.session.commit()
@@ -333,6 +376,8 @@ def create_soccer():
         year=int(d["year"]) if d.get("year") else None,
         cost=float(d.get("cost", 0)),
         current_value=float(d.get("current_value", 0)),
+        source=d.get("source", "Single"),
+        box_id=int(d["box_id"]) if d.get("box_id") else None,
         notes=d.get("notes", ""),
     )
     db.session.add(c)
@@ -359,6 +404,8 @@ def update_soccer(card_id):
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("soccer", c.id, new_value)
+    c.source     = d.get("source", c.source)
+    c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
     db.session.commit()
@@ -507,6 +554,54 @@ def import_csv(card_type):
     return jsonify({"imported": count})
 
 
+# ---------------------------------------------------------------------------
+# Routes — Boxes
+# ---------------------------------------------------------------------------
+
+@app.route("/api/boxes", methods=["GET"])
+def list_boxes():
+    """Return all boxes with live card stats for the portfolio view."""
+    boxes = Box.query.order_by(Box.created_at.desc()).all()
+    return jsonify([box_to_dict(b) for b in boxes])
+
+
+@app.route("/api/boxes", methods=["POST"])
+def create_box():
+    d = request.json
+    b = Box(
+        name=d["name"],
+        box_type=d.get("box_type", ""),
+        cost=float(d.get("cost", 0)),
+        notes=d.get("notes", ""),
+    )
+    db.session.add(b)
+    db.session.commit()
+    return jsonify(box_to_dict(b)), 201
+
+
+@app.route("/api/boxes/<int:box_id>", methods=["PUT"])
+def update_box(box_id):
+    b = Box.query.get_or_404(box_id)
+    d = request.json
+    b.name     = d.get("name", b.name)
+    b.box_type = d.get("box_type", b.box_type)
+    b.cost     = float(d.get("cost", b.cost))
+    b.notes    = d.get("notes", b.notes)
+    db.session.commit()
+    return jsonify(box_to_dict(b))
+
+
+@app.route("/api/boxes/<int:box_id>", methods=["DELETE"])
+def delete_box(box_id):
+    """Delete a box but keep its cards — just unlinks them (box_id → NULL)."""
+    b = Box.query.get_or_404(box_id)
+    WrestlingCard.query.filter_by(box_id=box_id).update({"box_id": None, "source": "Single"})
+    SoccerCard.query.filter_by(box_id=box_id).update({"box_id": None, "source": "Single"})
+    db.session.delete(b)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/stats")
 def stats():
     """Return card counts and total cost/value for both collections."""
@@ -538,5 +633,9 @@ if __name__ == "__main__":
                 existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})"))]
                 if "set_name" not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN set_name VARCHAR(200)"))
+                if "source" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN source VARCHAR(50) DEFAULT 'Single'"))
+                if "box_id" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN box_id INTEGER REFERENCES boxes(id)"))
             conn.commit()
     app.run(debug=True, port=5000)

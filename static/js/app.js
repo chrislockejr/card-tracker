@@ -23,15 +23,18 @@ const state = {
   importType:     null,
   portfolioChart: null,   // Chart.js instance; kept so we can destroy before redraw
   historyChart:   null,
+  editBoxId:      null,   // null = adding a new box, number = editing existing
+  boxes:          [],     // cached box list used to populate the box picker in card forms
 };
 
 // Bootstrap modal instances — initialized after DOM is ready
-let cardModal, historyModal, importModal;
+let cardModal, historyModal, importModal, boxModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
   historyModal = new bootstrap.Modal(document.getElementById("historyModal"));
   importModal  = new bootstrap.Modal(document.getElementById("importModal"));
+  boxModal     = new bootstrap.Modal(document.getElementById("boxModal"));
 
   setupTabs();
   setupSearch();
@@ -69,6 +72,121 @@ function switchTab(tab) {
   if (tab === "wrestling") loadWrestling();
   else if (tab === "soccer") loadSoccer();
   else if (tab === "portfolio") loadPortfolio();
+}
+
+
+// ---------------------------------------------------------------------------
+// Boxes (portfolio sub-section)
+// ---------------------------------------------------------------------------
+
+async function loadBoxes() {
+  state.boxes = await fetch("/api/boxes").then(r => r.json());
+  renderBoxes();
+}
+
+function renderBoxes() {
+  const tbody = document.getElementById("boxes-tbody");
+  if (!state.boxes.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">No boxes logged yet. Click "Log Box" to add one.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = state.boxes.map(b => {
+    const pl        = b.total_value - b.cost;
+    const plClass   = pl >= 0 ? "gain" : "loss";
+    const costPerCard = b.card_count > 0 ? (b.cost / b.card_count).toFixed(2) : "—";
+    return `<tr>
+      <td><strong>${esc(b.name)}</strong></td>
+      <td><span class="badge bg-secondary">${esc(b.box_type)}</span></td>
+      <td>${fmt(b.cost)}</td>
+      <td>${b.card_count}</td>
+      <td>${b.card_count > 0 ? "$" + costPerCard : "—"}</td>
+      <td>${fmt(b.total_value)}</td>
+      <td class="${plClass}">${pl >= 0 ? "+" : ""}${fmt(pl)}</td>
+      <td class="notes-cell" title="${esc(b.notes)}">${esc(b.notes)}</td>
+      <td class="action-btns">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openBoxModal(${b.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-danger" onclick="deleteBox(${b.id})" title="Delete"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function openBoxModal(id) {
+  state.editBoxId = id || null;
+  const b = id ? state.boxes.find(x => x.id === id) : null;
+  document.getElementById("boxModalTitle").textContent = b ? "Edit Box" : "Log Box Purchase";
+  document.getElementById("b-name").value     = b ? b.name     : "";
+  document.getElementById("b-box_type").value = b ? b.box_type : "Blaster Box";
+  document.getElementById("b-cost").value     = b ? b.cost     : 0;
+  document.getElementById("b-notes").value    = b ? b.notes    : "";
+  document.getElementById("boxSave").onclick  = saveBox;
+  boxModal.show();
+}
+
+async function saveBox() {
+  const name = document.getElementById("b-name").value.trim();
+  if (!name) { alert("Name is required."); return; }
+  const body = {
+    name,
+    box_type: document.getElementById("b-box_type").value,
+    cost:     document.getElementById("b-cost").value,
+    notes:    document.getElementById("b-notes").value.trim(),
+  };
+  const url    = state.editBoxId ? `/api/boxes/${state.editBoxId}` : "/api/boxes";
+  const method = state.editBoxId ? "PUT" : "POST";
+  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  boxModal.hide();
+  loadBoxes();
+}
+
+async function deleteBox(id) {
+  const b = state.boxes.find(x => x.id === id);
+  const msg = b.card_count > 0
+    ? `Delete "${b.name}"? Its ${b.card_count} linked card(s) will not be deleted but will be unlinked.`
+    : `Delete "${b.name}"?`;
+  if (!confirm(msg)) return;
+  await fetch(`/api/boxes/${id}`, { method: "DELETE" });
+  loadBoxes();
+}
+
+/** Populate the box <select> in a card form and wire up the cost suggestion. */
+async function populateBoxPicker(selectedBoxId) {
+  // Re-use cached boxes if available; they're refreshed whenever portfolio loads.
+  if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
+  const sel = document.getElementById("f-box_id");
+  sel.innerHTML = `<option value="">— select box —</option>` +
+    state.boxes.map(b =>
+      `<option value="${b.id}" data-cost="${b.cost}" data-count="${b.card_count}" ${b.id === selectedBoxId ? "selected" : ""}>${esc(b.name)} (${fmt(b.cost)})</option>`
+    ).join("");
+  updateCostSuggestion();
+}
+
+/** When the user picks a box, pre-fill cost with box_cost ÷ (existing_cards + 1). */
+function updateCostSuggestion() {
+  const sel = document.getElementById("f-box_id");
+  const hint = document.getElementById("box-cost-hint");
+  if (!sel || !hint) return;
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) { hint.textContent = ""; return; }
+  const boxCost  = parseFloat(opt.dataset.cost);
+  const existing = parseInt(opt.dataset.count);
+  const divisor  = existing + 1;
+  const suggested = (boxCost / divisor).toFixed(2);
+  document.getElementById("f-cost").value = suggested;
+  hint.textContent = `${fmt(boxCost)} ÷ ${divisor} cards = ${fmt(suggested)} suggested`;
+}
+
+/** Show or hide the box picker depending on whether source is a box type. */
+function onSourceChange() {
+  const source = document.getElementById("f-source").value;
+  const isBox  = ["Blaster Box", "Hobby Box", "Retail Pack", "Hanger Box", "Mega Box", "Collector Box"].includes(source);
+  document.getElementById("box-picker-row").classList.toggle("d-none", !isBox);
+  if (isBox) populateBoxPicker(null);
+  else {
+    // Clear cost hint when switching away from box source
+    const hint = document.getElementById("box-cost-hint");
+    if (hint) hint.textContent = "";
+  }
 }
 
 
@@ -224,6 +342,7 @@ function renderSoccerTable(data) {
 // ---------------------------------------------------------------------------
 
 async function loadPortfolio() {
+  loadBoxes();
   const stats = await fetch("/api/stats").then(r => r.json());
   const w = stats.wrestling, s = stats.soccer, t = stats.total;
 
@@ -357,6 +476,8 @@ async function openEditModal(type, id) {
   document.getElementById("modalBody").innerHTML    = type === "wrestling" ? wrestlingForm(c) : soccerForm(c);
   document.getElementById("modalSave").onclick      = saveCard;
   cardModal.show();
+  // If this card came from a box, populate the picker and pre-select the box
+  if (boxSourceSelected(c.source)) populateBoxPicker(c.box_id);
 }
 
 /** Returns the HTML for the wrestling card add/edit form, pre-filled with card data. */
@@ -414,6 +535,20 @@ function wrestlingForm(c) {
       <div class="col-md-6">
         <label class="form-label">Card Number</label>
         <input class="form-control" id="f-card_number" value="${esc(c.card_number||"")}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Source</label>
+        <select class="form-select" id="f-source" onchange="onSourceChange()">
+          ${["Single","Blaster Box","Hobby Box","Retail Pack","Hanger Box","Mega Box","Collector Box","Trade","Gift","Other"]
+            .map(s => `<option ${(c.source||"Single")===s?"selected":""}>${s}</option>`).join("")}
+        </select>
+      </div>
+      <div class="col-md-6 ${boxSourceSelected(c.source) ? '' : 'd-none'}" id="box-picker-row">
+        <label class="form-label">Box</label>
+        <select class="form-select" id="f-box_id" onchange="updateCostSuggestion()">
+          <option value="">— select box —</option>
+        </select>
+        <small class="text-muted" id="box-cost-hint"></small>
       </div>
       <div class="col-md-6">
         <label class="form-label">Cost ($)</label>
@@ -516,6 +651,20 @@ function soccerForm(c) {
         <input class="form-control" id="f-card_number" value="${esc(c.card_number||"")}">
       </div>
       <div class="col-md-6">
+        <label class="form-label">Source</label>
+        <select class="form-select" id="f-source" onchange="onSourceChange()">
+          ${["Single","Blaster Box","Hobby Box","Retail Pack","Hanger Box","Mega Box","Collector Box","Trade","Gift","Other"]
+            .map(s => `<option ${(c.source||"Single")===s?"selected":""}>${s}</option>`).join("")}
+        </select>
+      </div>
+      <div class="col-md-6 ${boxSourceSelected(c.source) ? '' : 'd-none'}" id="box-picker-row">
+        <label class="form-label">Box</label>
+        <select class="form-select" id="f-box_id" onchange="updateCostSuggestion()">
+          <option value="">— select box —</option>
+        </select>
+        <small class="text-muted" id="box-cost-hint"></small>
+      </div>
+      <div class="col-md-6">
         <label class="form-label">Cost ($)</label>
         <input class="form-control" type="number" step="0.01" id="f-cost" value="${c.cost||0}">
       </div>
@@ -532,6 +681,8 @@ function soccerForm(c) {
 
 async function saveCard() {
   const type = state.editType;
+  const source = document.getElementById("f-source").value;
+  const boxId  = document.getElementById("f-box_id")?.value || null;
   const body = type === "wrestling" ? {
     wrestler_name: document.getElementById("f-wrestler_name").value.trim(),
     set_name:      document.getElementById("f-set_name").value.trim(),
@@ -540,6 +691,7 @@ async function saveCard() {
     card_number:   document.getElementById("f-card_number").value.trim(),
     cost:          document.getElementById("f-cost").value,
     current_value: document.getElementById("f-current_value").value,
+    source, box_id: boxId || null,
     notes:         document.getElementById("f-notes").value.trim(),
   } : {
     player_name:   document.getElementById("f-player_name").value.trim(),
@@ -550,6 +702,7 @@ async function saveCard() {
     card_number:   document.getElementById("f-card_number").value.trim(),
     cost:          document.getElementById("f-cost").value,
     current_value: document.getElementById("f-current_value").value,
+    source, box_id: boxId || null,
     notes:         document.getElementById("f-notes").value.trim(),
   };
 
@@ -565,6 +718,9 @@ async function saveCard() {
   if (type === "wrestling") loadWrestling();
   else loadSoccer();
   loadNavStats();
+  // Refresh box stats so card counts stay current
+  if (state.currentTab === "portfolio") loadBoxes();
+  else state.boxes = await fetch("/api/boxes").then(r => r.json());
 }
 
 
@@ -725,6 +881,11 @@ function ebayResearchUrl(keywords) {
     tz:         "America/Chicago",
   });
   return `https://www.ebay.com/sh/research?${params}`;
+}
+
+/** Returns true for source values that represent a box purchase. */
+function boxSourceSelected(source) {
+  return ["Blaster Box","Hobby Box","Retail Pack","Hanger Box","Mega Box","Collector Box"].includes(source);
 }
 
 /** Format a number as a dollar amount. */
