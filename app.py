@@ -1,3 +1,9 @@
+"""
+Card Tracker — Flask backend
+Handles all data storage and API endpoints for the trading card inventory app.
+Data is stored in a local SQLite database (instance/cards.db).
+"""
+
 import csv
 import io
 from datetime import date, datetime
@@ -10,59 +16,82 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
 
-# --- Models ---
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
 
 class WrestlingCard(db.Model):
     __tablename__ = "wrestling_cards"
-    id = db.Column(db.Integer, primary_key=True)
+    id            = db.Column(db.Integer, primary_key=True)
     wrestler_name = db.Column(db.String(200), nullable=False)
-    brand = db.Column(db.String(100))
-    card_type = db.Column(db.String(100))
-    card_number = db.Column(db.String(50))
-    cost = db.Column(db.Float, default=0.0)
+    brand         = db.Column(db.String(100))   # Raw, SmackDown, AEW, etc.
+    card_type     = db.Column(db.String(100))   # Base, Refractor, Auto, etc.
+    card_number   = db.Column(db.String(50))    # e.g. "12/25" for numbered cards
+    cost          = db.Column(db.Float, default=0.0)
     current_value = db.Column(db.Float, default=0.0)
-    notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    history = db.relationship("ValueHistory", backref="wrestling_card", lazy="dynamic",
-                              primaryjoin="and_(ValueHistory.card_type=='wrestling', foreign(ValueHistory.card_id)==WrestlingCard.id)",
-                              foreign_keys="[ValueHistory.card_id]")
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship to value history. Uses a string-based join condition because
+    # ValueHistory stores card_type as a discriminator column rather than using
+    # separate FK columns for each card table.
+    history = db.relationship(
+        "ValueHistory", backref="wrestling_card", lazy="dynamic",
+        primaryjoin="and_(ValueHistory.card_type=='wrestling', foreign(ValueHistory.card_id)==WrestlingCard.id)",
+        foreign_keys="[ValueHistory.card_id]"
+    )
 
 
 class SoccerCard(db.Model):
     __tablename__ = "soccer_cards"
-    id = db.Column(db.Integer, primary_key=True)
-    player_name = db.Column(db.String(200), nullable=False)
-    team = db.Column(db.String(100))
-    league = db.Column(db.String(100))
-    card_type = db.Column(db.String(100))
-    card_number = db.Column(db.String(50))
-    year = db.Column(db.Integer)
-    cost = db.Column(db.Float, default=0.0)
+    id            = db.Column(db.Integer, primary_key=True)
+    player_name   = db.Column(db.String(200), nullable=False)
+    team          = db.Column(db.String(100))
+    league        = db.Column(db.String(100))   # Premier League, La Liga, etc.
+    card_type     = db.Column(db.String(100))
+    card_number   = db.Column(db.String(50))
+    year          = db.Column(db.Integer)
+    cost          = db.Column(db.Float, default=0.0)
     current_value = db.Column(db.Float, default=0.0)
-    notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ValueHistory(db.Model):
+    """
+    Stores one value snapshot per card per day. When a card's value is updated
+    multiple times in the same day, the existing row is overwritten rather than
+    creating duplicates — keeping the history clean for charting.
+
+    card_type is a string discriminator ('wrestling' or 'soccer') so a single
+    table can hold history for both card types without requiring nullable FKs.
+    """
     __tablename__ = "value_history"
-    id = db.Column(db.Integer, primary_key=True)
-    card_type = db.Column(db.String(20), nullable=False)  # 'wrestling' or 'soccer'
-    card_id = db.Column(db.Integer, nullable=False)
-    value = db.Column(db.Float, nullable=False)
+    id          = db.Column(db.Integer, primary_key=True)
+    card_type   = db.Column(db.String(20), nullable=False)  # 'wrestling' or 'soccer'
+    card_id     = db.Column(db.Integer, nullable=False)
+    value       = db.Column(db.Float, nullable=False)
     recorded_at = db.Column(db.Date, default=date.today)
 
+    # Composite index speeds up per-card history lookups, which is the most
+    # frequent query pattern when rendering charts.
     __table_args__ = (
         db.Index("idx_history_card", "card_type", "card_id"),
     )
 
 
-# --- Helpers ---
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def record_history(card_type, card_id, value):
+    """Upsert a value snapshot for today. One row per card per day."""
     today = date.today()
-    existing = ValueHistory.query.filter_by(card_type=card_type, card_id=card_id, recorded_at=today).first()
+    existing = ValueHistory.query.filter_by(
+        card_type=card_type, card_id=card_id, recorded_at=today
+    ).first()
     if existing:
         existing.value = value
     else:
@@ -70,11 +99,15 @@ def record_history(card_type, card_id, value):
 
 
 def wrestling_to_dict(c):
+    """Serialize a WrestlingCard to a JSON-safe dict."""
     return {
         "id": c.id, "type": "wrestling",
-        "wrestler_name": c.wrestler_name, "brand": c.brand or "",
-        "card_type": c.card_type or "", "card_number": c.card_number or "",
-        "cost": c.cost, "current_value": c.current_value,
+        "wrestler_name": c.wrestler_name,
+        "brand": c.brand or "",
+        "card_type": c.card_type or "",
+        "card_number": c.card_number or "",
+        "cost": c.cost,
+        "current_value": c.current_value,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
@@ -82,35 +115,46 @@ def wrestling_to_dict(c):
 
 
 def soccer_to_dict(c):
+    """Serialize a SoccerCard to a JSON-safe dict."""
     return {
         "id": c.id, "type": "soccer",
-        "player_name": c.player_name, "team": c.team or "",
-        "league": c.league or "", "card_type": c.card_type or "",
-        "card_number": c.card_number or "", "year": c.year or "",
-        "cost": c.cost, "current_value": c.current_value,
+        "player_name": c.player_name,
+        "team": c.team or "",
+        "league": c.league or "",
+        "card_type": c.card_type or "",
+        "card_number": c.card_number or "",
+        "year": c.year or "",
+        "cost": c.cost,
+        "current_value": c.current_value,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
     }
 
 
-# --- Routes ---
+# ---------------------------------------------------------------------------
+# Routes — Wrestling
+# ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-# Wrestling CRUD
 @app.route("/api/wrestling", methods=["GET"])
 def list_wrestling():
-    q = request.args.get("q", "").strip()
-    brand = request.args.get("brand", "").strip()
+    """
+    Return a paginated, filtered, sorted list of wrestling cards.
+    Also returns total cost and value across ALL wrestling cards (not just
+    the current page) so the summary bar stays accurate while filtering.
+    """
+    q         = request.args.get("q", "").strip()
+    brand     = request.args.get("brand", "").strip()
     card_type = request.args.get("card_type", "").strip()
-    sort = request.args.get("sort", "wrestler_name")
+    sort      = request.args.get("sort", "wrestler_name")
     direction = request.args.get("dir", "asc")
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 50))
+    page      = int(request.args.get("page", 1))
+    per_page  = int(request.args.get("per_page", 50))
 
     query = WrestlingCard.query
     if q:
@@ -122,31 +166,32 @@ def list_wrestling():
 
     col_map = {
         "wrestler_name": WrestlingCard.wrestler_name,
-        "brand": WrestlingCard.brand,
-        "card_type": WrestlingCard.card_type,
-        "card_number": WrestlingCard.card_number,
-        "cost": WrestlingCard.cost,
+        "brand":         WrestlingCard.brand,
+        "card_type":     WrestlingCard.card_type,
+        "card_number":   WrestlingCard.card_number,
+        "cost":          WrestlingCard.cost,
         "current_value": WrestlingCard.current_value,
     }
     col = col_map.get(sort, WrestlingCard.wrestler_name)
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
+    pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
+    total_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
     total_value = db.session.query(db.func.sum(WrestlingCard.current_value)).scalar() or 0
 
     return jsonify({
-        "cards": [wrestling_to_dict(c) for c in pagination.items],
-        "total": pagination.total,
-        "pages": pagination.pages,
-        "page": page,
-        "total_cost": round(total_cost, 2),
+        "cards":       [wrestling_to_dict(c) for c in pagination.items],
+        "total":       pagination.total,
+        "pages":       pagination.pages,
+        "page":        page,
+        "total_cost":  round(total_cost, 2),
         "total_value": round(total_value, 2),
     })
 
 
 @app.route("/api/wrestling", methods=["POST"])
 def create_wrestling():
+    """Add a new wrestling card and record its initial value in history."""
     d = request.json
     c = WrestlingCard(
         wrestler_name=d["wrestler_name"],
@@ -158,6 +203,8 @@ def create_wrestling():
         notes=d.get("notes", ""),
     )
     db.session.add(c)
+    # flush() assigns the auto-increment ID before commit so record_history
+    # can reference it within the same transaction.
     db.session.flush()
     record_history("wrestling", c.id, c.current_value)
     db.session.commit()
@@ -166,18 +213,22 @@ def create_wrestling():
 
 @app.route("/api/wrestling/<int:card_id>", methods=["PUT"])
 def update_wrestling(card_id):
+    """
+    Update a wrestling card. A new history snapshot is recorded only when
+    current_value actually changes, avoiding redundant data points.
+    """
     c = WrestlingCard.query.get_or_404(card_id)
     d = request.json
     c.wrestler_name = d.get("wrestler_name", c.wrestler_name)
-    c.brand = d.get("brand", c.brand)
-    c.card_type = d.get("card_type", c.card_type)
-    c.card_number = d.get("card_number", c.card_number)
-    c.cost = float(d.get("cost", c.cost))
-    new_value = float(d.get("current_value", c.current_value))
+    c.brand         = d.get("brand", c.brand)
+    c.card_type     = d.get("card_type", c.card_type)
+    c.card_number   = d.get("card_number", c.card_number)
+    c.cost          = float(d.get("cost", c.cost))
+    new_value       = float(d.get("current_value", c.current_value))
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("wrestling", c.id, new_value)
-    c.notes = d.get("notes", c.notes)
+    c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify(wrestling_to_dict(c))
@@ -185,6 +236,7 @@ def update_wrestling(card_id):
 
 @app.route("/api/wrestling/<int:card_id>", methods=["DELETE"])
 def delete_wrestling(card_id):
+    """Delete a card and all of its value history."""
     c = WrestlingCard.query.get_or_404(card_id)
     ValueHistory.query.filter_by(card_type="wrestling", card_id=card_id).delete()
     db.session.delete(c)
@@ -194,21 +246,29 @@ def delete_wrestling(card_id):
 
 @app.route("/api/wrestling/<int:card_id>/history")
 def wrestling_history(card_id):
+    """Return the full value history for a single wrestling card, oldest first."""
     rows = ValueHistory.query.filter_by(card_type="wrestling", card_id=card_id)\
         .order_by(ValueHistory.recorded_at).all()
     return jsonify([{"date": r.recorded_at.isoformat(), "value": r.value} for r in rows])
 
 
-# Soccer CRUD
+# ---------------------------------------------------------------------------
+# Routes — Soccer
+# ---------------------------------------------------------------------------
+
 @app.route("/api/soccer", methods=["GET"])
 def list_soccer():
-    q = request.args.get("q", "").strip()
-    team = request.args.get("team", "").strip()
+    """
+    Return a paginated, filtered, sorted list of soccer cards.
+    Mirrors the wrestling endpoint — see list_wrestling() for full comments.
+    """
+    q         = request.args.get("q", "").strip()
+    team      = request.args.get("team", "").strip()
     card_type = request.args.get("card_type", "").strip()
-    sort = request.args.get("sort", "player_name")
+    sort      = request.args.get("sort", "player_name")
     direction = request.args.get("dir", "asc")
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 50))
+    page      = int(request.args.get("page", 1))
+    per_page  = int(request.args.get("per_page", 50))
 
     query = SoccerCard.query
     if q:
@@ -219,33 +279,34 @@ def list_soccer():
         query = query.filter(SoccerCard.card_type.ilike(f"%{card_type}%"))
 
     col_map = {
-        "player_name": SoccerCard.player_name,
-        "team": SoccerCard.team,
-        "league": SoccerCard.league,
-        "card_type": SoccerCard.card_type,
-        "year": SoccerCard.year,
-        "cost": SoccerCard.cost,
+        "player_name":   SoccerCard.player_name,
+        "team":          SoccerCard.team,
+        "league":        SoccerCard.league,
+        "card_type":     SoccerCard.card_type,
+        "year":          SoccerCard.year,
+        "cost":          SoccerCard.cost,
         "current_value": SoccerCard.current_value,
     }
     col = col_map.get(sort, SoccerCard.player_name)
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
+    pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
+    total_cost  = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
     total_value = db.session.query(db.func.sum(SoccerCard.current_value)).scalar() or 0
 
     return jsonify({
-        "cards": [soccer_to_dict(c) for c in pagination.items],
-        "total": pagination.total,
-        "pages": pagination.pages,
-        "page": page,
-        "total_cost": round(total_cost, 2),
+        "cards":       [soccer_to_dict(c) for c in pagination.items],
+        "total":       pagination.total,
+        "pages":       pagination.pages,
+        "page":        page,
+        "total_cost":  round(total_cost, 2),
         "total_value": round(total_value, 2),
     })
 
 
 @app.route("/api/soccer", methods=["POST"])
 def create_soccer():
+    """Add a new soccer card and record its initial value in history."""
     d = request.json
     c = SoccerCard(
         player_name=d["player_name"],
@@ -267,20 +328,21 @@ def create_soccer():
 
 @app.route("/api/soccer/<int:card_id>", methods=["PUT"])
 def update_soccer(card_id):
+    """Update a soccer card. Records a new history snapshot only on value change."""
     c = SoccerCard.query.get_or_404(card_id)
     d = request.json
     c.player_name = d.get("player_name", c.player_name)
-    c.team = d.get("team", c.team)
-    c.league = d.get("league", c.league)
-    c.card_type = d.get("card_type", c.card_type)
+    c.team        = d.get("team", c.team)
+    c.league      = d.get("league", c.league)
+    c.card_type   = d.get("card_type", c.card_type)
     c.card_number = d.get("card_number", c.card_number)
-    c.year = int(d["year"]) if d.get("year") else c.year
-    c.cost = float(d.get("cost", c.cost))
-    new_value = float(d.get("current_value", c.current_value))
+    c.year        = int(d["year"]) if d.get("year") else c.year
+    c.cost        = float(d.get("cost", c.cost))
+    new_value     = float(d.get("current_value", c.current_value))
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("soccer", c.id, new_value)
-    c.notes = d.get("notes", c.notes)
+    c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify(soccer_to_dict(c))
@@ -288,6 +350,7 @@ def update_soccer(card_id):
 
 @app.route("/api/soccer/<int:card_id>", methods=["DELETE"])
 def delete_soccer(card_id):
+    """Delete a card and all of its value history."""
     c = SoccerCard.query.get_or_404(card_id)
     ValueHistory.query.filter_by(card_type="soccer", card_id=card_id).delete()
     db.session.delete(c)
@@ -297,14 +360,24 @@ def delete_soccer(card_id):
 
 @app.route("/api/soccer/<int:card_id>/history")
 def soccer_history(card_id):
+    """Return the full value history for a single soccer card, oldest first."""
     rows = ValueHistory.query.filter_by(card_type="soccer", card_id=card_id)\
         .order_by(ValueHistory.recorded_at).all()
     return jsonify([{"date": r.recorded_at.isoformat(), "value": r.value} for r in rows])
 
 
-# Portfolio history (aggregate daily totals)
+# ---------------------------------------------------------------------------
+# Routes — Portfolio & Utilities
+# ---------------------------------------------------------------------------
+
 @app.route("/api/portfolio/history")
 def portfolio_history():
+    """
+    Return aggregate daily value totals for the portfolio chart.
+    Groups all history rows by date and card_type, then merges them into a
+    single list of {date, wrestling, soccer, total} objects suitable for
+    Chart.js datasets.
+    """
     card_type = request.args.get("type", "all")
     rows = db.session.query(
         ValueHistory.recorded_at,
@@ -316,6 +389,7 @@ def portfolio_history():
     rows = rows.group_by(ValueHistory.recorded_at, ValueHistory.card_type)\
                .order_by(ValueHistory.recorded_at).all()
 
+    # Pivot into {date: {wrestling: N, soccer: N}} then flatten to a list
     by_date = {}
     for row in rows:
         d = row.recorded_at.isoformat()
@@ -325,24 +399,30 @@ def portfolio_history():
 
     result = []
     for d in sorted(by_date.keys()):
-        result.append({"date": d, **by_date[d], "total": round(by_date[d]["wrestling"] + by_date[d]["soccer"], 2)})
+        result.append({
+            "date": d,
+            **by_date[d],
+            "total": round(by_date[d]["wrestling"] + by_date[d]["soccer"], 2)
+        })
     return jsonify(result)
 
 
-# CSV Export
 @app.route("/api/export/<card_type>")
 def export_csv(card_type):
+    """Stream a CSV download of all cards for the given type."""
     si = io.StringIO()
     if card_type == "wrestling":
         writer = csv.writer(si)
-        writer.writerow(["ID", "Wrestler Name", "Brand", "Card Type", "Card Number", "Cost", "Value", "Notes", "Created At"])
+        writer.writerow(["ID", "Wrestler Name", "Brand", "Card Type", "Card Number",
+                         "Cost", "Value", "Notes", "Created At"])
         for c in WrestlingCard.query.order_by(WrestlingCard.wrestler_name).all():
             writer.writerow([c.id, c.wrestler_name, c.brand, c.card_type, c.card_number,
                              c.cost, c.current_value, c.notes, c.created_at.date()])
         filename = "wrestling_cards.csv"
     elif card_type == "soccer":
         writer = csv.writer(si)
-        writer.writerow(["ID", "Player Name", "Team", "League", "Card Type", "Card Number", "Year", "Cost", "Value", "Notes", "Created At"])
+        writer.writerow(["ID", "Player Name", "Team", "League", "Card Type", "Card Number",
+                         "Year", "Cost", "Value", "Notes", "Created At"])
         for c in SoccerCard.query.order_by(SoccerCard.player_name).all():
             writer.writerow([c.id, c.player_name, c.team, c.league, c.card_type, c.card_number,
                              c.year, c.cost, c.current_value, c.notes, c.created_at.date()])
@@ -356,15 +436,21 @@ def export_csv(card_type):
     return send_file(output, mimetype="text/csv", as_attachment=True, download_name=filename)
 
 
-# CSV Import
 @app.route("/api/import/<card_type>", methods=["POST"])
 def import_csv(card_type):
+    """
+    Bulk-import cards from a CSV file. The CSV must use the same column headers
+    produced by the export endpoint. Existing cards are not deduplicated —
+    importing the same file twice will create duplicates.
+    """
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "No file"}), 400
+
     stream = io.StringIO(f.stream.read().decode("utf-8"))
     reader = csv.DictReader(stream)
     count = 0
+
     if card_type == "wrestling":
         for row in reader:
             c = WrestlingCard(
@@ -397,25 +483,26 @@ def import_csv(card_type):
             db.session.flush()
             record_history("soccer", c.id, c.current_value)
             count += 1
+
     db.session.commit()
     return jsonify({"imported": count})
 
 
-# Stats
 @app.route("/api/stats")
 def stats():
+    """Return card counts and total cost/value for both collections."""
     w_count = WrestlingCard.query.count()
-    w_cost = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
+    w_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
     w_value = db.session.query(db.func.sum(WrestlingCard.current_value)).scalar() or 0
     s_count = SoccerCard.query.count()
-    s_cost = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
+    s_cost  = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
     s_value = db.session.query(db.func.sum(SoccerCard.current_value)).scalar() or 0
     return jsonify({
         "wrestling": {"count": w_count, "cost": round(w_cost, 2), "value": round(w_value, 2)},
-        "soccer": {"count": s_count, "cost": round(s_cost, 2), "value": round(s_value, 2)},
+        "soccer":    {"count": s_count, "cost": round(s_cost, 2), "value": round(s_value, 2)},
         "total": {
             "count": w_count + s_count,
-            "cost": round(w_cost + s_cost, 2),
+            "cost":  round(w_cost + s_cost, 2),
             "value": round(w_value + s_value, 2),
         }
     })
