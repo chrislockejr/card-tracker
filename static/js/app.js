@@ -138,8 +138,8 @@ function renderWrestlingTable(data) {
     const gainStr   = (gain >= 0 ? "+" : "") + fmt(gain);
 
     // Build search URLs from card data so users can quickly check market prices
-    const ebayQ = encodeURIComponent(`${c.wrestler_name} ${c.card_type} ${c.brand} wrestling card`);
-    const ptQ   = encodeURIComponent(`${c.wrestler_name} ${c.card_type}`);
+    const ebayQ        = encodeURIComponent(`${c.wrestler_name} ${c.card_type} ${c.brand} wrestling card`);
+    const researchUrl  = ebayResearchUrl(`${c.wrestler_name} ${c.card_type} ${c.brand}`);
 
     return `<tr>
       <td><strong>${esc(c.wrestler_name)}</strong></td>
@@ -150,11 +150,11 @@ function renderWrestlingTable(data) {
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
-        <button class="btn btn-xs btn-outline-primary me-1"   onclick="openEditModal('wrestling',${c.id})"                          title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-info me-1"      onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')"  title="Value History"><i class="bi bi-graph-up"></i></button>
-        <a      class="btn btn-xs btn-outline-warning me-1"   href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="Search eBay"><i class="bi bi-bag"></i></a>
-        <a      class="btn btn-xs btn-outline-secondary me-1" href="https://www.130point.com/sales/?q=${ptQ}"       target="_blank" title="Search 130pt"><i class="bi bi-search"></i></a>
-        <button class="btn btn-xs btn-outline-danger"         onclick="deleteCard('wrestling',${c.id})"                            title="Delete"><i class="bi bi-trash"></i></button>
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('wrestling',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
+        <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
+        <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
+        <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('wrestling',${c.id})"                           title="Delete"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
   }).join("");
@@ -189,8 +189,8 @@ function renderSoccerTable(data) {
     const gain      = c.current_value - c.cost;
     const gainClass = gain >= 0 ? "gain" : "loss";
     const gainStr   = (gain >= 0 ? "+" : "") + fmt(gain);
-    const ebayQ     = encodeURIComponent(`${c.player_name} ${c.card_type} ${c.team} soccer card`);
-    const ptQ       = encodeURIComponent(`${c.player_name} ${c.card_type}`);
+    const ebayQ       = encodeURIComponent(`${c.player_name} ${c.card_type} ${c.team} soccer card`);
+    const researchUrl = ebayResearchUrl(`${c.player_name} ${c.card_type} ${c.team}`);
 
     return `<tr>
       <td><strong>${esc(c.player_name)}</strong></td>
@@ -203,11 +203,11 @@ function renderSoccerTable(data) {
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
-        <button class="btn btn-xs btn-outline-primary me-1"   onclick="openEditModal('soccer',${c.id})"                       title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-info me-1"      onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
-        <a      class="btn btn-xs btn-outline-warning me-1"   href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="Search eBay"><i class="bi bi-bag"></i></a>
-        <a      class="btn btn-xs btn-outline-secondary me-1" href="https://www.130point.com/sales/?q=${ptQ}"       target="_blank" title="Search 130pt"><i class="bi bi-search"></i></a>
-        <button class="btn btn-xs btn-outline-danger"         onclick="deleteCard('soccer',${c.id})"                          title="Delete"><i class="bi bi-trash"></i></button>
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                       title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
+        <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
+        <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
+        <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('soccer',${c.id})"                          title="Delete"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
   }).join("");
@@ -621,6 +621,29 @@ async function loadNavStats() {
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
+
+/**
+ * Build an eBay Seller Research URL for sold listings over the last 30 days.
+ * Timestamps must be in milliseconds and generated fresh each call so the
+ * 30-day window always ends at the current moment.
+ */
+function ebayResearchUrl(keywords) {
+  const end   = Date.now();
+  const start = end - 30 * 24 * 60 * 60 * 1000;
+  const params = new URLSearchParams({
+    marketplace: "EBAY-US",
+    keywords,
+    dayRange:   "30",
+    endDate:    end,
+    startDate:  start,
+    categoryId: "0",
+    offset:     "0",
+    limit:      "50",
+    tabName:    "SOLD",
+    tz:         "America/Chicago",
+  });
+  return `https://www.ebay.com/sh/research?${params}`;
+}
 
 /** Format a number as a dollar amount. */
 function fmt(n) {
