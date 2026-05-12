@@ -106,6 +106,25 @@ class ValueHistory(db.Model):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def redistribute_box_costs(box_id):
+    """Evenly split box.cost across every card linked to this box.
+    Called whenever a card is added to, removed from, or the box cost changes,
+    so all cards always reflect the current equal share."""
+    if not box_id:
+        return
+    box = Box.query.get(box_id)
+    if not box:
+        return
+    w_cards = WrestlingCard.query.filter_by(box_id=box_id).all()
+    s_cards = SoccerCard.query.filter_by(box_id=box_id).all()
+    total = len(w_cards) + len(s_cards)
+    if total == 0:
+        return
+    per_card = round(box.cost / total, 2)
+    for c in w_cards + s_cards:
+        c.cost = per_card
+
+
 def record_history(card_type, card_id, value):
     """Upsert a value snapshot for today. One row per card per day."""
     today = date.today()
@@ -258,6 +277,7 @@ def create_wrestling():
     # can reference it within the same transaction.
     db.session.flush()
     record_history("wrestling", c.id, c.current_value)
+    redistribute_box_costs(c.box_id)
     db.session.commit()
     return jsonify(wrestling_to_dict(c)), 201
 
@@ -280,10 +300,15 @@ def update_wrestling(card_id):
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("wrestling", c.id, new_value)
+    old_box_id   = c.box_id
     c.source     = d.get("source", c.source)
     c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
+    # Redistribute costs for both the old and new box in case the card moved between boxes
+    redistribute_box_costs(c.box_id)
+    if old_box_id and old_box_id != c.box_id:
+        redistribute_box_costs(old_box_id)
     db.session.commit()
     return jsonify(wrestling_to_dict(c))
 
@@ -292,8 +317,11 @@ def update_wrestling(card_id):
 def delete_wrestling(card_id):
     """Delete a card and all of its value history."""
     c = WrestlingCard.query.get_or_404(card_id)
+    box_id = c.box_id
     ValueHistory.query.filter_by(card_type="wrestling", card_id=card_id).delete()
     db.session.delete(c)
+    db.session.flush()
+    redistribute_box_costs(box_id)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -383,6 +411,7 @@ def create_soccer():
     db.session.add(c)
     db.session.flush()
     record_history("soccer", c.id, c.current_value)
+    redistribute_box_costs(c.box_id)
     db.session.commit()
     return jsonify(soccer_to_dict(c)), 201
 
@@ -404,10 +433,14 @@ def update_soccer(card_id):
     if new_value != c.current_value:
         c.current_value = new_value
         record_history("soccer", c.id, new_value)
+    old_box_id   = c.box_id
     c.source     = d.get("source", c.source)
     c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
     c.updated_at = datetime.utcnow()
+    redistribute_box_costs(c.box_id)
+    if old_box_id and old_box_id != c.box_id:
+        redistribute_box_costs(old_box_id)
     db.session.commit()
     return jsonify(soccer_to_dict(c))
 
@@ -416,8 +449,11 @@ def update_soccer(card_id):
 def delete_soccer(card_id):
     """Delete a card and all of its value history."""
     c = SoccerCard.query.get_or_404(card_id)
+    box_id = c.box_id
     ValueHistory.query.filter_by(card_type="soccer", card_id=card_id).delete()
     db.session.delete(c)
+    db.session.flush()
+    redistribute_box_costs(box_id)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -587,6 +623,8 @@ def update_box(box_id):
     b.box_type = d.get("box_type", b.box_type)
     b.cost     = float(d.get("cost", b.cost))
     b.notes    = d.get("notes", b.notes)
+    # Re-split the updated cost across all linked cards
+    redistribute_box_costs(b.id)
     db.session.commit()
     return jsonify(box_to_dict(b))
 

@@ -149,9 +149,8 @@ async function deleteBox(id) {
   loadBoxes();
 }
 
-/** Populate the box <select> in a card form and wire up the cost suggestion. */
+/** Populate the box <select> in a card form and show the cost preview. */
 async function populateBoxPicker(selectedBoxId) {
-  // Re-use cached boxes if available; they're refreshed whenever portfolio loads.
   if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
   const sel = document.getElementById("f-box_id");
   sel.innerHTML = `<option value="">— select box —</option>` +
@@ -161,29 +160,25 @@ async function populateBoxPicker(selectedBoxId) {
   updateCostSuggestion();
 }
 
-/** When the user picks a box, pre-fill cost with box_cost ÷ (existing_cards + 1). */
+/** Update the cost hint when a box is selected — cost is set server-side on save. */
 function updateCostSuggestion() {
-  const sel = document.getElementById("f-box_id");
+  const sel  = document.getElementById("f-box_id");
   const hint = document.getElementById("box-cost-hint");
   if (!sel || !hint) return;
   const opt = sel.selectedOptions[0];
   if (!opt || !opt.value) { hint.textContent = ""; return; }
-  const boxCost  = parseFloat(opt.dataset.cost);
-  const existing = parseInt(opt.dataset.count);
-  const divisor  = existing + 1;
-  const suggested = (boxCost / divisor).toFixed(2);
-  document.getElementById("f-cost").value = suggested;
-  hint.textContent = `${fmt(boxCost)} ÷ ${divisor} cards = ${fmt(suggested)} suggested`;
+  const boxCost = parseFloat(opt.dataset.cost);
+  const count   = parseInt(opt.dataset.count) + 1;  // +1 for the card being added
+  hint.textContent = `Cost will be set to ${fmt(boxCost)} ÷ ${count} cards = ${fmt(boxCost / count)} after saving`;
 }
 
 /** Show or hide the box picker depending on whether source is a box type. */
 function onSourceChange() {
   const source = document.getElementById("f-source").value;
-  const isBox  = ["Blaster Box", "Hobby Box", "Retail Pack", "Hanger Box", "Mega Box", "Collector Box"].includes(source);
+  const isBox  = boxSourceSelected(source);
   document.getElementById("box-picker-row").classList.toggle("d-none", !isBox);
   if (isBox) populateBoxPicker(null);
   else {
-    // Clear cost hint when switching away from box source
     const hint = document.getElementById("box-cost-hint");
     if (hint) hint.textContent = "";
   }
