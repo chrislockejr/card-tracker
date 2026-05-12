@@ -187,7 +187,7 @@ async function loadSoccer() {
 function renderSoccerTable(data) {
   const tbody = document.getElementById("s-tbody");
   if (!data.cards.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">No cards found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No cards found.</td></tr>`;
     return;
   }
   tbody.innerHTML = data.cards.map(c => {
@@ -204,7 +204,6 @@ function renderSoccerTable(data) {
       <td>${esc(c.league)}</td>
       <td>${esc(c.card_type)}</td>
       <td>${esc(c.card_number)}</td>
-      <td>${c.year || ""}</td>
       <td>${fmt(c.cost)}</td>
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
@@ -381,19 +380,35 @@ function wrestlingForm(c) {
       </div>
       <div class="col-md-6">
         <label class="form-label">Brand</label>
-        <input class="form-control" id="f-brand" list="brand-list" value="${esc(c.brand||"")}">
-        <datalist id="brand-list">
-          <option value="Raw"><option value="SmackDown"><option value="NXT">
-          <option value="AEW"><option value="WCW"><option value="ECW"><option value="WWF">
+        <input class="form-control" id="f-brand" list="w-brand-list" value="${esc(c.brand||"")}">
+        <datalist id="w-brand-list">
+          <option value="Raw">
+          <option value="SmackDown">
+          <option value="NXT">
+          <option value="AEW">
+          <option value="WCW">
+          <option value="ECW">
+          <option value="WWF">
         </datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Type</label>
-        <input class="form-control" id="f-card_type" list="type-list" value="${esc(c.card_type||"")}">
-        <datalist id="type-list">
-          <option value="Base"><option value="Refractor"><option value="Auto">
-          <option value="Prizm"><option value="Patch"><option value="Rookie">
-          <option value="Parallel"><option value="Gold"><option value="Silver"><option value="Bronze">
+        <input class="form-control" id="f-card_type" list="w-type-list" value="${esc(c.card_type||"")}">
+        <datalist id="w-type-list">
+          <option value="Base">
+          <option value="Refractor">
+          <option value="Auto">
+          <option value="Prizm">
+          <option value="Patch">
+          <option value="Patch Auto">
+          <option value="Rookie">
+          <option value="Rookie Auto">
+          <option value="Parallel">
+          <option value="Gold">
+          <option value="Silver">
+          <option value="Bronze">
+          <option value="Superfractor">
+          <option value="1/1">
         </datalist>
       </div>
       <div class="col-md-6">
@@ -436,31 +451,69 @@ function soccerForm(c) {
       </div>
       <div class="col-md-6">
         <label class="form-label">Team</label>
-        <input class="form-control" id="f-team" value="${esc(c.team||"")}">
+        <input class="form-control" id="f-team" list="s-team-list" value="${esc(c.team||"")}">
+        <datalist id="s-team-list">
+          <option value="USA">
+          <option value="Brazil">
+          <option value="Argentina">
+          <option value="England">
+          <option value="France">
+          <option value="Germany">
+          <option value="Spain">
+          <option value="Portugal">
+          <option value="Netherlands">
+          <option value="Italy">
+          <option value="Mexico">
+          <option value="Japan">
+          <option value="Colombia">
+          <option value="Uruguay">
+          <option value="Belgium">
+          <option value="Croatia">
+          <option value="Morocco">
+          <option value="Senegal">
+        </datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label">League</label>
-        <input class="form-control" id="f-league" list="league-list" value="${esc(c.league||"")}">
-        <datalist id="league-list">
-          <option value="Premier League"><option value="La Liga"><option value="Bundesliga">
-          <option value="Serie A"><option value="Ligue 1"><option value="MLS"><option value="Champions League">
+        <input class="form-control" id="f-league" list="s-league-list" value="${esc(c.league||"")}">
+        <datalist id="s-league-list">
+          <option value="International">
+          <option value="Premier League">
+          <option value="La Liga">
+          <option value="Bundesliga">
+          <option value="Serie A">
+          <option value="Ligue 1">
+          <option value="MLS">
+          <option value="Champions League">
+          <option value="Europa League">
+          <option value="World Cup">
+          <option value="Copa America">
+          <option value="CONCACAF">
         </datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Type</label>
-        <input class="form-control" id="f-card_type" list="type-list2" value="${esc(c.card_type||"")}">
-        <datalist id="type-list2">
-          <option value="Base"><option value="Refractor"><option value="Auto">
-          <option value="Prizm"><option value="Patch"><option value="Rookie"><option value="Parallel">
+        <input class="form-control" id="f-card_type" list="s-type-list" value="${esc(c.card_type||"")}">
+        <datalist id="s-type-list">
+          <option value="Base">
+          <option value="Refractor">
+          <option value="Auto">
+          <option value="Prizm">
+          <option value="Patch">
+          <option value="Patch Auto">
+          <option value="Rookie">
+          <option value="Rookie Auto">
+          <option value="Parallel">
+          <option value="Gold">
+          <option value="Silver">
+          <option value="Bronze">
+          <option value="Superfractor">
+          <option value="1/1">
         </datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Number</label>
         <input class="form-control" id="f-card_number" value="${esc(c.card_number||"")}">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Year</label>
-        <input class="form-control" type="number" id="f-year" value="${c.year||""}">
       </div>
       <div class="col-md-6">
         <label class="form-label">Cost ($)</label>
@@ -495,7 +548,6 @@ async function saveCard() {
     league:        document.getElementById("f-league").value.trim(),
     card_type:     document.getElementById("f-card_type").value.trim(),
     card_number:   document.getElementById("f-card_number").value.trim(),
-    year:          document.getElementById("f-year").value,
     cost:          document.getElementById("f-cost").value,
     current_value: document.getElementById("f-current_value").value,
     notes:         document.getElementById("f-notes").value.trim(),
