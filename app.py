@@ -107,9 +107,9 @@ class ValueHistory(db.Model):
 # ---------------------------------------------------------------------------
 
 def redistribute_box_costs(box_id):
-    """Evenly split box.cost across every card linked to this box.
-    Called whenever a card is added to, removed from, or the box cost changes,
-    so all cards always reflect the current equal share."""
+    """Split box.cost evenly across non-base cards linked to this box.
+    Base cards are tracked for inventory purposes but assigned $0 cost —
+    the assumption is that boxes are purchased chasing hits, not base cards."""
     if not box_id:
         return
     box = Box.query.get(box_id)
@@ -117,12 +117,14 @@ def redistribute_box_costs(box_id):
         return
     w_cards = WrestlingCard.query.filter_by(box_id=box_id).all()
     s_cards = SoccerCard.query.filter_by(box_id=box_id).all()
-    total = len(w_cards) + len(s_cards)
-    if total == 0:
-        return
-    per_card = round(box.cost / total, 2)
-    for c in w_cards + s_cards:
+    all_cards = w_cards + s_cards
+    hits = [c for c in all_cards if (c.card_type or "").strip().lower() != "base"]
+    base = [c for c in all_cards if (c.card_type or "").strip().lower() == "base"]
+    per_card = round(box.cost / len(hits), 2) if hits else 0
+    for c in hits:
         c.cost = per_card
+    for c in base:
+        c.cost = 0.0
 
 
 def record_history(card_type, card_id, value):
