@@ -17,6 +17,7 @@
 const state = {
   wrestling: { page: 1, sort: "wrestler_name", dir: "asc", perPage: 50 },
   soccer:    { page: 1, sort: "player_name",   dir: "asc", perPage: 50 },
+  sold:      { page: 1, sort: "sold_date",     dir: "desc", perPage: 50 },
   currentTab:     "wrestling",
   editId:         null,   // null = adding a new card, number = editing existing
   editType:       null,   // 'wrestling' or 'soccer'
@@ -25,16 +26,21 @@ const state = {
   historyChart:   null,
   editBoxId:      null,   // null = adding a new box, number = editing existing
   boxes:          [],     // cached box list used to populate the box picker in card forms
+  sellCardId:     null,   // card being marked as sold
+  sellCardType:   null,
+  editExpenseId:  null,   // null = adding, number = editing
 };
 
 // Bootstrap modal instances — initialized after DOM is ready
-let cardModal, historyModal, importModal, boxModal;
+let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
   historyModal = new bootstrap.Modal(document.getElementById("historyModal"));
   importModal  = new bootstrap.Modal(document.getElementById("importModal"));
   boxModal     = new bootstrap.Modal(document.getElementById("boxModal"));
+  sellModal    = new bootstrap.Modal(document.getElementById("sellModal"));
+  expenseModal = new bootstrap.Modal(document.getElementById("expenseModal"));
 
   setupTabs();
   setupSearch();
@@ -65,12 +71,13 @@ function switchTab(tab) {
   });
 
   // Show only the selected tab panel
-  ["wrestling", "soccer", "portfolio"].forEach(t => {
+  ["wrestling", "soccer", "sold", "portfolio"].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle("d-none", t !== tab);
   });
 
   if (tab === "wrestling") loadWrestling();
   else if (tab === "soccer") loadSoccer();
+  else if (tab === "sold") loadSold();
   else if (tab === "portfolio") loadPortfolio();
 }
 
@@ -149,6 +156,84 @@ async function deleteBox(id) {
   loadBoxes();
 }
 
+// ---------------------------------------------------------------------------
+// Expenses
+// ---------------------------------------------------------------------------
+
+async function loadExpenses() {
+  const expenses = await fetch("/api/expenses").then(r => r.json());
+  renderExpenses(expenses);
+}
+
+function renderExpenses(expenses) {
+  const tbody = document.getElementById("expenses-tbody");
+  if (!expenses.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">No expenses logged yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = expenses.map(e => `<tr>
+    <td>${esc(e.expense_date)}</td>
+    <td><span class="badge bg-secondary">${esc(e.category)}</span></td>
+    <td>${esc(e.description)}</td>
+    <td class="loss">−${fmt(e.amount)}</td>
+    <td class="notes-cell" title="${esc(e.notes)}">${esc(e.notes)}</td>
+    <td class="action-btns">
+      <button class="btn btn-xs btn-outline-primary me-1" onclick="openExpenseModal(${e.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+      <button class="btn btn-xs btn-outline-danger" onclick="deleteExpense(${e.id})" title="Delete"><i class="bi bi-trash"></i></button>
+    </td>
+  </tr>`).join("");
+}
+
+function openExpenseModal(id) {
+  state.editExpenseId = id || null;
+  const expenses = Array.from(document.querySelectorAll("#expenses-tbody tr")).map(r => r._expense).filter(Boolean);
+  // Fetch fresh data if editing
+  if (id) {
+    fetch("/api/expenses").then(r => r.json()).then(list => {
+      const e = list.find(x => x.id === id);
+      if (!e) return;
+      _fillExpenseModal(e);
+    });
+  } else {
+    _fillExpenseModal(null);
+  }
+  expenseModal.show();
+}
+
+function _fillExpenseModal(e) {
+  document.getElementById("expenseModalTitle").textContent = e ? "Edit Expense" : "Log Expense";
+  document.getElementById("e-category").value    = e ? e.category    : "Sleeves";
+  document.getElementById("e-amount").value      = e ? e.amount      : "0";
+  document.getElementById("e-description").value = e ? e.description : "";
+  document.getElementById("e-date").value        = e ? e.expense_date : new Date().toISOString().slice(0, 10);
+  document.getElementById("e-notes").value       = e ? e.notes       : "";
+  document.getElementById("expenseSave").onclick = saveExpense;
+}
+
+async function saveExpense() {
+  const amount = parseFloat(document.getElementById("e-amount").value);
+  if (!amount || amount <= 0) { alert("Enter an amount greater than $0."); return; }
+  const body = {
+    category:     document.getElementById("e-category").value,
+    description:  document.getElementById("e-description").value.trim(),
+    amount,
+    expense_date: document.getElementById("e-date").value,
+    notes:        document.getElementById("e-notes").value.trim(),
+  };
+  const url    = state.editExpenseId ? `/api/expenses/${state.editExpenseId}` : "/api/expenses";
+  const method = state.editExpenseId ? "PUT" : "POST";
+  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  expenseModal.hide();
+  loadPortfolio();
+}
+
+async function deleteExpense(id) {
+  if (!confirm("Delete this expense?")) return;
+  await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+  loadPortfolio();
+}
+
+
 /** Populate the box <select> in a card form and show the cost preview. */
 async function populateBoxPicker(selectedBoxId) {
   if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
@@ -204,6 +289,8 @@ function setupSearch() {
   document.getElementById("s-filter-set").addEventListener("input",   debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
   document.getElementById("s-filter-team").addEventListener("input",  debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
   document.getElementById("s-filter-type").addEventListener("input",  debounce(() => { state.soccer.page = 1; loadSoccer(); }, 300));
+  document.getElementById("sold-search").addEventListener("input",      debounce(() => { state.sold.page = 1; loadSold(); }, 300));
+  document.getElementById("sold-filter-type").addEventListener("change", () => { state.sold.page = 1; loadSold(); });
 
   // Clicking a sortable header toggles asc/desc; clicking a new column resets to asc
   document.querySelectorAll("th.sortable").forEach(th => {
@@ -215,7 +302,8 @@ function setupSearch() {
       else { s.sort = col; s.dir = "asc"; }
       s.page = 1;
       if (tab === "wrestling") loadWrestling();
-      else loadSoccer();
+      else if (tab === "soccer") loadSoccer();
+      else if (tab === "sold") loadSold();
     });
   });
 
@@ -268,6 +356,7 @@ function renderWrestlingTable(data) {
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('wrestling',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
         <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
@@ -321,11 +410,12 @@ function renderSoccerTable(data) {
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
-        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                       title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('soccer',${c.id},'${esc(c.player_name)}')" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
+        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')"   title="Value History"><i class="bi bi-graph-up"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
-        <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('soccer',${c.id})"                          title="Delete"><i class="bi bi-trash"></i></button>
+        <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('soccer',${c.id})"                            title="Delete"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
   }).join("");
@@ -338,30 +428,68 @@ function renderSoccerTable(data) {
 
 async function loadPortfolio() {
   loadBoxes();
-  const stats = await fetch("/api/stats").then(r => r.json());
+  loadExpenses();
+  const [stats, salesStats, expStats] = await Promise.all([
+    fetch("/api/stats").then(r => r.json()),
+    fetch("/api/sales/stats").then(r => r.json()),
+    fetch("/api/expenses/stats").then(r => r.json()),
+  ]);
   const w = stats.wrestling, s = stats.soccer, t = stats.total;
+  const ss = salesStats;
+  const es = expStats;
+
+  const plClass = pn => pn >= 0 ? "gain" : "loss";
+  const plStr   = pn => (pn >= 0 ? "+" : "") + fmt(pn);
+  const trueNet = ss.net_profit - es.grand_total;
 
   document.getElementById("portfolio-summary").innerHTML = `
     <table class="table table-sm mb-0">
-      <thead><tr><th></th><th>Cards</th><th>Cost</th><th>Value</th><th>P&L</th></tr></thead>
+      <thead><tr><th></th><th>Cards</th><th>Cost</th><th>Value</th><th>Unrealized P&L</th></tr></thead>
       <tbody>
         <tr>
           <td><strong>Wrestling</strong></td><td>${w.count}</td>
           <td>${fmt(w.cost)}</td><td>${fmt(w.value)}</td>
-          <td class="${w.value-w.cost>=0?'gain':'loss'}">${(w.value-w.cost>=0?"+":"")+fmt(w.value-w.cost)}</td>
+          <td class="${plClass(w.value-w.cost)}">${plStr(w.value-w.cost)}</td>
         </tr>
         <tr>
           <td><strong>Soccer</strong></td><td>${s.count}</td>
           <td>${fmt(s.cost)}</td><td>${fmt(s.value)}</td>
-          <td class="${s.value-s.cost>=0?'gain':'loss'}">${(s.value-s.cost>=0?"+":"")+fmt(s.value-s.cost)}</td>
+          <td class="${plClass(s.value-s.cost)}">${plStr(s.value-s.cost)}</td>
         </tr>
         <tr class="table-dark">
-          <td><strong>Total</strong></td><td>${t.count}</td>
+          <td><strong>Active Total</strong></td><td>${t.count}</td>
           <td><strong>${fmt(t.cost)}</strong></td><td><strong>${fmt(t.value)}</strong></td>
-          <td class="${t.value-t.cost>=0?'gain':'loss'}"><strong>${(t.value-t.cost>=0?"+":"")+fmt(t.value-t.cost)}</strong></td>
+          <td class="${plClass(t.value-t.cost)}"><strong>${plStr(t.value-t.cost)}</strong></td>
         </tr>
       </tbody>
-    </table>`;
+    </table>
+    <hr class="my-2">
+    <p class="fw-bold mb-1">Realized Sales (${ss.count} sold)</p>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Revenue</th><th>Fees</th><th>Cost Basis</th><th>Net Profit</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>${fmt(ss.total_revenue)}</td>
+          <td class="loss">−${fmt(ss.total_fees)}</td>
+          <td class="loss">−${fmt(ss.total_cost)}</td>
+          <td class="${plClass(ss.net_profit)}"><strong>${plStr(ss.net_profit)}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <hr class="my-2">
+    <p class="fw-bold mb-1">Supply &amp; Overhead (${es.by_category.length} categories)</p>
+    <table class="table table-sm mb-0">
+      ${es.by_category.map(c => `<tr><td class="text-muted">${esc(c.category)}</td><td class="loss">−${fmt(c.total)}</td></tr>`).join("")}
+      <tr class="table-dark">
+        <td><strong>Total Expenses</strong></td>
+        <td class="loss"><strong>−${fmt(es.grand_total)}</strong></td>
+      </tr>
+    </table>
+    <hr class="my-2">
+    <div class="d-flex justify-content-between align-items-center">
+      <strong>True Net Profit</strong>
+      <strong class="${plClass(trueNet)} fs-5">${plStr(trueNet)}</strong>
+    </div>`;
 
   loadPortfolioChart();
 }
@@ -728,6 +856,138 @@ async function deleteCard(type, id) {
   await fetch(`/api/${type}/${id}`, { method: "DELETE" });
   if (type === "wrestling") loadWrestling();
   else loadSoccer();
+  loadNavStats();
+}
+
+
+// ---------------------------------------------------------------------------
+// Sold tab
+// ---------------------------------------------------------------------------
+
+async function loadSold() {
+  const s = state.sold;
+  const params = new URLSearchParams({
+    q:         document.getElementById("sold-search").value,
+    card_type: document.getElementById("sold-filter-type").value,
+    sort: s.sort, dir: s.dir, page: s.page, per_page: s.perPage,
+  });
+  const data = await fetch(`/api/sales?${params}`).then(r => r.json());
+  renderSoldTable(data);
+  renderSoldPagination(data);
+  renderSoldSummary(data);
+}
+
+function renderSoldTable(data) {
+  const tbody = document.getElementById("sold-tbody");
+  if (!data.sales.length) {
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center text-muted py-4">No sales recorded yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.sales.map(s => {
+    const plClass = s.net_profit >= 0 ? "gain" : "loss";
+    const plStr   = (s.net_profit >= 0 ? "+" : "") + fmt(s.net_profit);
+    const badge   = s.card_type === "wrestling"
+      ? `<span class="badge bg-danger">W</span>`
+      : `<span class="badge bg-primary">S</span>`;
+    return `<tr>
+      <td>${badge}</td>
+      <td><strong>${esc(s.name)}</strong></td>
+      <td>${esc(s.set_name)}</td>
+      <td><small class="text-muted">${esc(s.card_detail)}${s.card_number ? " #"+esc(s.card_number) : ""}</small></td>
+      <td>${esc(s.sold_date)}</td>
+      <td>${esc(s.platform)}</td>
+      <td>${fmt(s.cost)}</td>
+      <td>${fmt(s.sold_price)}</td>
+      <td>${fmt(s.fees)}</td>
+      <td class="${plClass}"><strong>${plStr}</strong></td>
+      <td class="notes-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
+      <td class="action-btns">
+        <button class="btn btn-xs btn-outline-secondary" onclick="unarchiveSale(${s.id})" title="Unarchive (restore to inventory)"><i class="bi bi-arrow-counterclockwise"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function renderSoldSummary(data) {
+  // Compute totals from the current page — a separate stats call is used in Portfolio
+  // for accurate all-time numbers; here we just show the filtered page count.
+  document.getElementById("sold-summary").innerHTML =
+    `<span><strong>${data.total}</strong> sales</span>`;
+}
+
+function renderSoldPagination(data) {
+  const s     = state.sold;
+  const el    = document.getElementById("sold-pagination");
+  const start = (data.page - 1) * s.perPage + 1;
+  const end   = Math.min(data.page * s.perPage, data.total);
+
+  el.innerHTML = `
+    <div class="d-flex align-items-center gap-2">
+      <small class="text-muted">Showing ${data.total ? start : 0}–${end} of ${data.total}</small>
+      <select class="form-select form-select-sm per-page-select" onchange="changeSoldPerPage(this.value)">
+        ${[25,50,100,200].map(n => `<option value="${n}" ${n===s.perPage?"selected":""}>${n}/page</option>`).join("")}
+      </select>
+    </div>
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+        <li class="page-item ${data.page===1?"disabled":""}">
+          <a class="page-link" href="#" onclick="goSoldPage(${data.page-1})">‹</a>
+        </li>
+        ${pageNums(data.page, data.pages).map(p =>
+          p === "..."
+            ? `<li class="page-item disabled"><span class="page-link">…</span></li>`
+            : `<li class="page-item ${p===data.page?"active":""}"><a class="page-link" href="#" onclick="goSoldPage(${p})">${p}</a></li>`
+        ).join("")}
+        <li class="page-item ${data.page===data.pages||data.pages===0?"disabled":""}">
+          <a class="page-link" href="#" onclick="goSoldPage(${data.page+1})">›</a>
+        </li>
+      </ul>
+    </nav>`;
+}
+
+function goSoldPage(page) { state.sold.page = page; loadSold(); }
+function changeSoldPerPage(val) { state.sold.perPage = parseInt(val); state.sold.page = 1; loadSold(); }
+
+function openSellModal(type, id, name) {
+  state.sellCardId   = id;
+  state.sellCardType = type;
+  document.getElementById("sell-card-label").textContent = `Selling: ${name}`;
+  document.getElementById("sell-price").value    = "0";
+  document.getElementById("sell-fees").value     = "0";
+  document.getElementById("sell-platform").value = "";
+  document.getElementById("sell-date").value     = new Date().toISOString().slice(0, 10);
+  document.getElementById("sell-notes").value    = "";
+  document.getElementById("sellSave").onclick    = saveSale;
+  sellModal.show();
+}
+
+async function saveSale() {
+  const price = parseFloat(document.getElementById("sell-price").value);
+  if (!price || price <= 0) { alert("Enter a sold price greater than $0."); return; }
+  const body = {
+    card_type:  state.sellCardType,
+    card_id:    state.sellCardId,
+    sold_price: price,
+    fees:       parseFloat(document.getElementById("sell-fees").value) || 0,
+    platform:   document.getElementById("sell-platform").value.trim(),
+    sold_date:  document.getElementById("sell-date").value,
+    notes:      document.getElementById("sell-notes").value.trim(),
+  };
+  const res = await fetch("/api/sales", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) { alert("Error recording sale."); return; }
+  sellModal.hide();
+  // Refresh whichever inventory tab sent us here, plus nav stats
+  if (state.sellCardType === "wrestling") loadWrestling();
+  else loadSoccer();
+  loadNavStats();
+}
+
+async function unarchiveSale(saleId) {
+  if (!confirm("Restore this card to active inventory? The sale record will be deleted.")) return;
+  await fetch(`/api/sales/${saleId}`, { method: "DELETE" });
+  loadSold();
   loadNavStats();
 }
 

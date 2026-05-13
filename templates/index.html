@@ -22,6 +22,7 @@
   <ul class="nav nav-tabs mb-3" id="mainTabs">
     <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="sold">Sold</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
   </ul>
 
@@ -96,6 +97,43 @@
     <div id="s-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
   </div>
 
+  <!-- Sold Tab -->
+  <div id="tab-sold" class="d-none">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-sm-3"><input class="form-control form-control-sm" id="sold-search" placeholder="Search name..."></div>
+      <div class="col-sm-2">
+        <select class="form-select form-select-sm" id="sold-filter-type">
+          <option value="">All types</option>
+          <option value="wrestling">Wrestling</option>
+          <option value="soccer">Soccer</option>
+        </select>
+      </div>
+    </div>
+    <div class="summary-bar mb-2" id="sold-summary"></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover table-striped align-middle" id="sold-table">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th>Type</th>
+            <th class="sortable" data-col="name" data-tab="sold">Name <i class="bi bi-arrow-down-up"></i></th>
+            <th>Set</th>
+            <th>Detail</th>
+            <th class="sortable" data-col="sold_date" data-tab="sold">Date <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="platform" data-tab="sold">Platform <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="cost" data-tab="sold">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="sold_price" data-tab="sold">Sold <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="fees" data-tab="sold">Fees <i class="bi bi-arrow-down-up"></i></th>
+            <th>Net Profit</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sold-tbody"></tbody>
+      </table>
+    </div>
+    <div id="sold-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
   <!-- Portfolio Tab -->
   <div id="tab-portfolio" class="d-none">
     <div class="row g-3">
@@ -140,6 +178,29 @@
                 </tr>
               </thead>
               <tbody id="boxes-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Supply &amp; Overhead Expenses</span>
+            <button class="btn btn-sm btn-primary" onclick="openExpenseModal()"><i class="bi bi-plus-lg"></i> Log Expense</button>
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="expenses-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -220,6 +281,108 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" id="boxSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div class="modal fade" id="expenseModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="expenseModalTitle">Log Expense</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Category *</label>
+            <select class="form-select" id="e-category">
+              <option value="Sleeves">Sleeves</option>
+              <option value="Top Loaders">Top Loaders</option>
+              <option value="Card Savers">Card Savers</option>
+              <option value="Mailers">Mailers</option>
+              <option value="Shipping">Shipping</option>
+              <option value="Storage">Storage</option>
+              <option value="Grading">Grading</option>
+              <option value="Tools">Tools</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Amount ($) *</label>
+            <input class="form-control" type="number" step="0.01" id="e-amount" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Description</label>
+            <input class="form-control" id="e-description" placeholder="e.g. 100-count sleeve pack">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" id="e-date">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="e-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="expenseSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mark as Sold Modal -->
+<div class="modal fade" id="sellModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sellModalTitle">Mark as Sold</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <p class="mb-1 text-muted small" id="sell-card-label"></p>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Sold Price ($) *</label>
+            <input class="form-control" type="number" step="0.01" id="sell-price" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Fees ($)</label>
+            <input class="form-control" type="number" step="0.01" id="sell-fees" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Platform</label>
+            <input class="form-control" id="sell-platform" list="sell-platform-list" placeholder="e.g. eBay">
+            <datalist id="sell-platform-list">
+              <option value="eBay">
+              <option value="COMC">
+              <option value="Facebook Marketplace">
+              <option value="Instagram">
+              <option value="Trade">
+              <option value="Local">
+              <option value="Other">
+            </datalist>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" id="sell-date">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="sell-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success" id="sellSave"><i class="bi bi-currency-dollar"></i> Record Sale</button>
       </div>
     </div>
   </div>

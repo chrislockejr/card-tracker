@@ -33,6 +33,7 @@ class WrestlingCard(db.Model):
     current_value = db.Column(db.Float, default=0.0)
     source        = db.Column(db.String(50), default="Single")  # Single, Blaster Box, Hobby Box, etc.
     box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
+    status        = db.Column(db.String(20), default="active")  # 'active' or 'sold'
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -61,6 +62,7 @@ class SoccerCard(db.Model):
     current_value = db.Column(db.Float, default=0.0)
     source        = db.Column(db.String(50), default="Single")
     box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
+    status        = db.Column(db.String(20), default="active")
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -77,6 +79,41 @@ class Box(db.Model):
     cost       = db.Column(db.Float, default=0.0)
     notes      = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Expense(db.Model):
+    """A supply or overhead cost (sleeves, mailers, shipping materials, etc.)."""
+    __tablename__ = "expenses"
+    id           = db.Column(db.Integer, primary_key=True)
+    category     = db.Column(db.String(100), nullable=False)  # Sleeves, Mailers, Shipping, etc.
+    description  = db.Column(db.String(200))
+    amount       = db.Column(db.Float, nullable=False)
+    expense_date = db.Column(db.Date, default=date.today)
+    notes        = db.Column(db.Text)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Sale(db.Model):
+    """Permanent record of a completed card sale. Stores a snapshot of the card
+    at time of sale so the record stays accurate even if the card is later edited."""
+    __tablename__ = "sales"
+    id          = db.Column(db.Integer, primary_key=True)
+    card_type   = db.Column(db.String(20), nullable=False)   # 'wrestling' or 'soccer'
+    card_id     = db.Column(db.Integer, nullable=True)        # reference to original card (nullable — card may be deleted later)
+    # Card snapshot — what was sold
+    name        = db.Column(db.String(200))
+    set_name    = db.Column(db.String(200))
+    card_detail = db.Column(db.String(200))  # "Brand · Type" or "Team · League"
+    card_number = db.Column(db.String(50))
+    source      = db.Column(db.String(50))
+    cost        = db.Column(db.Float, default=0.0)   # cost basis at time of sale
+    # Sale details
+    sold_price  = db.Column(db.Float, nullable=False)
+    fees        = db.Column(db.Float, default=0.0)
+    platform    = db.Column(db.String(100))
+    sold_date   = db.Column(db.Date, default=date.today)
+    notes       = db.Column(db.Text)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class ValueHistory(db.Model):
@@ -115,8 +152,9 @@ def redistribute_box_costs(box_id):
     box = Box.query.get(box_id)
     if not box:
         return
-    w_cards = WrestlingCard.query.filter_by(box_id=box_id).all()
-    s_cards = SoccerCard.query.filter_by(box_id=box_id).all()
+    # Only active cards share the cost — sold cards keep their cost basis fixed.
+    w_cards = WrestlingCard.query.filter_by(box_id=box_id, status="active").all()
+    s_cards = SoccerCard.query.filter_by(box_id=box_id, status="active").all()
     all_cards = w_cards + s_cards
     hits = [c for c in all_cards if (c.card_type or "").strip().lower() != "base"]
     base = [c for c in all_cards if (c.card_type or "").strip().lower() == "base"]
@@ -179,6 +217,29 @@ def soccer_to_dict(c):
     }
 
 
+def sale_to_dict(s):
+    return {
+        "id": s.id, "card_type": s.card_type, "card_id": s.card_id,
+        "name": s.name or "", "set_name": s.set_name or "",
+        "card_detail": s.card_detail or "", "card_number": s.card_number or "",
+        "source": s.source or "", "cost": s.cost,
+        "sold_price": s.sold_price, "fees": s.fees,
+        "net_profit": round(s.sold_price - s.fees - s.cost, 2),
+        "platform": s.platform or "", "notes": s.notes or "",
+        "sold_date": s.sold_date.isoformat() if s.sold_date else "",
+        "created_at": s.created_at.isoformat() if s.created_at else "",
+    }
+
+
+def expense_to_dict(e):
+    return {
+        "id": e.id, "category": e.category, "description": e.description or "",
+        "amount": e.amount, "notes": e.notes or "",
+        "expense_date": e.expense_date.isoformat() if e.expense_date else "",
+        "created_at": e.created_at.isoformat() if e.created_at else "",
+    }
+
+
 def box_to_dict(b):
     """Serialize a Box with live card stats (count and current value of linked cards)."""
     w_cards = WrestlingCard.query.filter_by(box_id=b.id)
@@ -222,7 +283,7 @@ def list_wrestling():
     page      = int(request.args.get("page", 1))
     per_page  = int(request.args.get("per_page", 50))
 
-    query = WrestlingCard.query
+    query = WrestlingCard.query.filter_by(status="active")
     if q:
         query = query.filter(WrestlingCard.wrestler_name.ilike(f"%{q}%"))
     if set_name:
@@ -245,8 +306,8 @@ def list_wrestling():
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
     pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
-    total_value = db.session.query(db.func.sum(WrestlingCard.current_value)).scalar() or 0
+    total_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).filter_by(status="active").scalar() or 0
+    total_value = db.session.query(db.func.sum(WrestlingCard.current_value)).filter_by(status="active").scalar() or 0
 
     return jsonify({
         "cards":       [wrestling_to_dict(c) for c in pagination.items],
@@ -355,7 +416,7 @@ def list_soccer():
     page      = int(request.args.get("page", 1))
     per_page  = int(request.args.get("per_page", 50))
 
-    query = SoccerCard.query
+    query = SoccerCard.query.filter_by(status="active")
     if q:
         query = query.filter(SoccerCard.player_name.ilike(f"%{q}%"))
     if set_name:
@@ -379,8 +440,8 @@ def list_soccer():
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
     pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost  = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
-    total_value = db.session.query(db.func.sum(SoccerCard.current_value)).scalar() or 0
+    total_cost  = db.session.query(db.func.sum(SoccerCard.cost)).filter_by(status="active").scalar() or 0
+    total_value = db.session.query(db.func.sum(SoccerCard.current_value)).filter_by(status="active").scalar() or 0
 
     return jsonify({
         "cards":       [soccer_to_dict(c) for c in pagination.items],
@@ -644,13 +705,13 @@ def delete_box(box_id):
 
 @app.route("/api/stats")
 def stats():
-    """Return card counts and total cost/value for both collections."""
-    w_count = WrestlingCard.query.count()
-    w_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).scalar() or 0
-    w_value = db.session.query(db.func.sum(WrestlingCard.current_value)).scalar() or 0
-    s_count = SoccerCard.query.count()
-    s_cost  = db.session.query(db.func.sum(SoccerCard.cost)).scalar() or 0
-    s_value = db.session.query(db.func.sum(SoccerCard.current_value)).scalar() or 0
+    """Return card counts and total cost/value for both collections (active cards only)."""
+    w_count = WrestlingCard.query.filter_by(status="active").count()
+    w_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).filter_by(status="active").scalar() or 0
+    w_value = db.session.query(db.func.sum(WrestlingCard.current_value)).filter_by(status="active").scalar() or 0
+    s_count = SoccerCard.query.filter_by(status="active").count()
+    s_cost  = db.session.query(db.func.sum(SoccerCard.cost)).filter_by(status="active").scalar() or 0
+    s_value = db.session.query(db.func.sum(SoccerCard.current_value)).filter_by(status="active").scalar() or 0
     return jsonify({
         "wrestling": {"count": w_count, "cost": round(w_cost, 2), "value": round(w_value, 2)},
         "soccer":    {"count": s_count, "cost": round(s_cost, 2), "value": round(s_value, 2)},
@@ -659,6 +720,181 @@ def stats():
             "cost":  round(w_cost + s_cost, 2),
             "value": round(w_value + s_value, 2),
         }
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Sales ledger
+# ---------------------------------------------------------------------------
+
+@app.route("/api/sales", methods=["GET"])
+def list_sales():
+    """Return a paginated list of sales, optionally filtered by name or card type."""
+    q         = request.args.get("q", "").strip()
+    card_type = request.args.get("card_type", "").strip()
+    sort      = request.args.get("sort", "sold_date")
+    direction = request.args.get("dir", "desc")
+    page      = int(request.args.get("page", 1))
+    per_page  = int(request.args.get("per_page", 50))
+
+    query = Sale.query
+    if q:
+        query = query.filter(Sale.name.ilike(f"%{q}%"))
+    if card_type:
+        query = query.filter(Sale.card_type == card_type)
+
+    col_map = {
+        "sold_date":  Sale.sold_date,
+        "name":       Sale.name,
+        "sold_price": Sale.sold_price,
+        "fees":       Sale.fees,
+        "cost":       Sale.cost,
+        "platform":   Sale.platform,
+    }
+    col = col_map.get(sort, Sale.sold_date)
+    query = query.order_by(col.desc() if direction == "desc" else col.asc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "sales": [sale_to_dict(s) for s in pagination.items],
+        "total": pagination.total,
+        "pages": pagination.pages,
+        "page":  page,
+    })
+
+
+@app.route("/api/sales", methods=["POST"])
+def create_sale():
+    """Mark a card as sold: snapshot it into the sales ledger and set status='sold'."""
+    d         = request.json
+    card_type = d.get("card_type")
+    card_id   = int(d.get("card_id"))
+
+    if card_type == "wrestling":
+        card        = WrestlingCard.query.get_or_404(card_id)
+        name        = card.wrestler_name
+        card_detail = " · ".join(filter(None, [card.brand, card.card_type]))
+    else:
+        card        = SoccerCard.query.get_or_404(card_id)
+        name        = card.player_name
+        card_detail = " · ".join(filter(None, [card.team, card.league]))
+
+    sale = Sale(
+        card_type   = card_type,
+        card_id     = card_id,
+        name        = name,
+        set_name    = card.set_name,
+        card_detail = card_detail,
+        card_number = card.card_number,
+        source      = card.source,
+        cost        = card.cost,
+        sold_price  = float(d.get("sold_price", 0)),
+        fees        = float(d.get("fees", 0)),
+        platform    = d.get("platform", ""),
+        sold_date   = date.fromisoformat(d["sold_date"]) if d.get("sold_date") else date.today(),
+        notes       = d.get("notes", ""),
+    )
+    db.session.add(sale)
+    card.status = "sold"
+    box_id = card.box_id
+    db.session.flush()
+    redistribute_box_costs(box_id)
+    db.session.commit()
+    return jsonify(sale_to_dict(sale)), 201
+
+
+@app.route("/api/sales/<int:sale_id>", methods=["DELETE"])
+def delete_sale(sale_id):
+    """Unarchive a sale: restore the card to active status and delete the sale record."""
+    s = Sale.query.get_or_404(sale_id)
+    if s.card_id:
+        card = WrestlingCard.query.get(s.card_id) if s.card_type == "wrestling" else SoccerCard.query.get(s.card_id)
+        if card:
+            card.status = "active"
+            box_id = card.box_id
+            db.session.delete(s)
+            db.session.flush()
+            redistribute_box_costs(box_id)
+            db.session.commit()
+            return jsonify({"ok": True})
+    db.session.delete(s)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sales/stats")
+def sales_stats():
+    """Realized P&L totals across all sales."""
+    total_revenue = db.session.query(db.func.sum(Sale.sold_price)).scalar() or 0
+    total_fees    = db.session.query(db.func.sum(Sale.fees)).scalar() or 0
+    total_cost    = db.session.query(db.func.sum(Sale.cost)).scalar() or 0
+    total_count   = Sale.query.count()
+    return jsonify({
+        "count":         total_count,
+        "total_revenue": round(total_revenue, 2),
+        "total_fees":    round(total_fees, 2),
+        "total_cost":    round(total_cost, 2),
+        "net_profit":    round(total_revenue - total_fees - total_cost, 2),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Expenses
+# ---------------------------------------------------------------------------
+
+@app.route("/api/expenses", methods=["GET"])
+def list_expenses():
+    expenses = Expense.query.order_by(Expense.expense_date.desc(), Expense.created_at.desc()).all()
+    return jsonify([expense_to_dict(e) for e in expenses])
+
+
+@app.route("/api/expenses", methods=["POST"])
+def create_expense():
+    d = request.json
+    e = Expense(
+        category     = d["category"],
+        description  = d.get("description", ""),
+        amount       = float(d["amount"]),
+        expense_date = date.fromisoformat(d["expense_date"]) if d.get("expense_date") else date.today(),
+        notes        = d.get("notes", ""),
+    )
+    db.session.add(e)
+    db.session.commit()
+    return jsonify(expense_to_dict(e)), 201
+
+
+@app.route("/api/expenses/<int:expense_id>", methods=["PUT"])
+def update_expense(expense_id):
+    e = Expense.query.get_or_404(expense_id)
+    d = request.json
+    e.category     = d.get("category", e.category)
+    e.description  = d.get("description", e.description)
+    e.amount       = float(d.get("amount", e.amount))
+    e.expense_date = date.fromisoformat(d["expense_date"]) if d.get("expense_date") else e.expense_date
+    e.notes        = d.get("notes", e.notes)
+    db.session.commit()
+    return jsonify(expense_to_dict(e))
+
+
+@app.route("/api/expenses/<int:expense_id>", methods=["DELETE"])
+def delete_expense(expense_id):
+    e = Expense.query.get_or_404(expense_id)
+    db.session.delete(e)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/expenses/stats")
+def expenses_stats():
+    """Total spent per category and overall."""
+    rows = db.session.query(
+        Expense.category,
+        db.func.sum(Expense.amount).label("total")
+    ).group_by(Expense.category).order_by(db.func.sum(Expense.amount).desc()).all()
+    grand_total = sum(r.total for r in rows)
+    return jsonify({
+        "by_category": [{"category": r.category, "total": round(r.total, 2)} for r in rows],
+        "grand_total": round(grand_total, 2),
     })
 
 
@@ -677,5 +913,7 @@ if __name__ == "__main__":
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN source VARCHAR(50) DEFAULT 'Single'"))
                 if "box_id" not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN box_id INTEGER REFERENCES boxes(id)"))
+                if "status" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
             conn.commit()
     app.run(debug=True, port=5000)

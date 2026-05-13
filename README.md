@@ -72,11 +72,73 @@ Then visit `http://localhost:5000`. Press `Ctrl+C` in the terminal to stop it.
 ./start.sh
 ```
 
+## Autostart on login (macOS)
+
+To have the app start automatically whenever you log in, set it up as a launchd service:
+
+**1. Create the plist file:**
+
+```bash
+cat > ~/Library/LaunchAgents/com.cardtracker.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cardtracker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/chris/card-tracker/app.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/usr/local/lib/python3.7/site-packages</string>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Users/chris/card-tracker</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/chris/card-tracker/logs/output.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/chris/card-tracker/logs/error.log</string>
+</dict>
+</plist>
+EOF
+```
+
+**2. Create the logs directory and load the service:**
+
+```bash
+mkdir -p ~/card-tracker/logs
+launchctl load ~/Library/LaunchAgents/com.cardtracker.plist
+```
+
+The app will now start automatically at login and restart itself if it crashes. Logs are written to `card-tracker/logs/`.
+
+**Managing the service:**
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.cardtracker.plist  # disable autostart
+launchctl stop com.cardtracker                                  # stop now
+launchctl start com.cardtracker                                 # start now
+```
+
 ## Backing up your data
 
-Your card data lives in `instance/cards.db` (a SQLite database file). To back it up, just copy that file somewhere safe.
+Your card data lives in `instance/cards.db` (a SQLite database file). To back it up, just copy that file somewhere safe — you do not need to stop the server first.
 
-You can also export a CSV from inside the app using the **Export CSV** button on either the Wrestling or Soccer tab. The CSV can be re-imported later if needed.
+For a guaranteed consistent snapshot (useful for automated backups), use SQLite's built-in backup command:
+
+```bash
+sqlite3 instance/cards.db ".backup instance/cards_backup.db"
+```
+
+You can also export a CSV from inside the app using the **Export CSV** button on either the Wrestling or Soccer tab, but note that CSV export only covers active cards — it does not include value history, sales records, or box purchases. Use the database file for full backups.
 
 > The database file is excluded from git (via `.gitignore`) so your personal card data is never uploaded to GitHub.
 
