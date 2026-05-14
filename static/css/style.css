@@ -22,3 +22,7 @@ body { background: #f8f9fa; font-size: 0.875rem; }
 .per-page-select { width: 70px; }
 
 #portfolioChart, #historyChart { max-height: 340px; }
+#priceChart { max-height: 280px; }
+
+.cursor-pointer { cursor: pointer; }
+.cursor-pointer:hover { background: rgba(13,110,253,0.05); }

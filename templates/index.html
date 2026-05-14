@@ -23,6 +23,7 @@
     <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="sold">Sold</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="prices">Prices</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
   </ul>
 
@@ -132,6 +133,65 @@
       </table>
     </div>
     <div id="sold-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
+  <!-- Prices Tab -->
+  <div id="tab-prices" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="text-muted small">Track box prices across retailers over time.</span>
+      <button class="btn btn-sm btn-primary" onclick="openProductModal()"><i class="bi bi-plus-lg"></i> Add Box</button>
+    </div>
+    <div class="table-responsive mb-4">
+      <table class="table table-sm table-hover align-middle" id="products-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Box</th>
+            <th>Type</th>
+            <th>Retailers</th>
+            <th>Best Price</th>
+            <th>Best Retailer</th>
+            <th>Last Checked</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="products-tbody"></tbody>
+      </table>
+    </div>
+    <!-- Detail panel — shown when a product row is selected -->
+    <div id="price-detail" class="d-none">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-bold" id="price-detail-title"></span>
+          <button class="btn btn-sm btn-primary" onclick="openPriceModal()"><i class="bi bi-plus-lg"></i> Log Price</button>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <canvas id="priceChart" height="120"></canvas>
+            </div>
+            <div class="col-md-4">
+              <h6 class="fw-bold mb-2">Current prices</h6>
+              <div id="price-latest"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive mt-3">
+        <table class="table table-sm table-hover align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Date</th>
+              <th>Retailer</th>
+              <th>Price</th>
+              <th>Link</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="price-history-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- Portfolio Tab -->
@@ -281,6 +341,97 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" id="boxSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Box Product Modal -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="productModalTitle">Add Box</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Name *</label>
+            <input class="form-control" id="p-name" placeholder="e.g. Topps Chrome WWE 2026 Blaster">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Type</label>
+            <select class="form-select" id="p-box_type">
+              <option value="">— select —</option>
+              <option value="Blaster Box">Blaster Box</option>
+              <option value="Hobby Box">Hobby Box</option>
+              <option value="Retail Pack">Retail Pack</option>
+              <option value="Hanger Box">Hanger Box</option>
+              <option value="Mega Box">Mega Box</option>
+              <option value="Collector Box">Collector Box</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="p-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="productSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log Price Modal -->
+<div class="modal fade" id="priceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Log Price</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Retailer *</label>
+            <input class="form-control" id="pr-retailer" list="retailer-list" placeholder="e.g. Amazon">
+            <datalist id="retailer-list">
+              <option value="Amazon">
+              <option value="Walmart">
+              <option value="Target">
+              <option value="Dave &amp; Adam's">
+              <option value="Blowout Cards">
+              <option value="Steel City Collectibles">
+              <option value="eBay">
+              <option value="Other">
+            </datalist>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Price ($) *</label>
+            <input class="form-control" type="number" step="0.01" id="pr-price" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Date Checked</label>
+            <input class="form-control" type="date" id="pr-date">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Product URL</label>
+            <input class="form-control" id="pr-url" placeholder="https://...">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="pr-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="priceSave">Save</button>
       </div>
     </div>
   </div>

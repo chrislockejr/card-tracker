@@ -81,6 +81,31 @@ class Box(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class BoxProduct(db.Model):
+    """A box product being price-tracked across retailers (e.g. Topps Chrome WWE 2026 Blaster).
+    Separate from Box, which represents an actual purchase."""
+    __tablename__ = "box_products"
+    id       = db.Column(db.Integer, primary_key=True)
+    name     = db.Column(db.String(200), nullable=False)
+    box_type = db.Column(db.String(50))
+    notes    = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    prices   = db.relationship("BoxPrice", backref="product", lazy="dynamic", cascade="all, delete-orphan")
+
+
+class BoxPrice(db.Model):
+    """A single price observation for a box product at a specific retailer on a specific date."""
+    __tablename__ = "box_prices"
+    id           = db.Column(db.Integer, primary_key=True)
+    product_id   = db.Column(db.Integer, db.ForeignKey("box_products.id"), nullable=False)
+    retailer     = db.Column(db.String(100), nullable=False)
+    price        = db.Column(db.Float, nullable=False)
+    url          = db.Column(db.Text)
+    checked_date = db.Column(db.Date, default=date.today)
+    notes        = db.Column(db.Text)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Expense(db.Model):
     """A supply or overhead cost (sleeves, mailers, shipping materials, etc.)."""
     __tablename__ = "expenses"
@@ -228,6 +253,39 @@ def sale_to_dict(s):
         "platform": s.platform or "", "notes": s.notes or "",
         "sold_date": s.sold_date.isoformat() if s.sold_date else "",
         "created_at": s.created_at.isoformat() if s.created_at else "",
+    }
+
+
+def boxprice_to_dict(p):
+    return {
+        "id": p.id, "product_id": p.product_id,
+        "retailer": p.retailer, "price": p.price,
+        "url": p.url or "", "notes": p.notes or "",
+        "checked_date": p.checked_date.isoformat() if p.checked_date else "",
+        "created_at": p.created_at.isoformat() if p.created_at else "",
+    }
+
+
+def boxproduct_to_dict(p):
+    """Serialize a BoxProduct with a summary of the latest price per retailer."""
+    all_prices = p.prices.order_by(BoxPrice.checked_date.desc(), BoxPrice.created_at.desc()).all()
+    # Latest price per retailer
+    seen = {}
+    for bp in all_prices:
+        if bp.retailer not in seen:
+            seen[bp.retailer] = bp
+    latest = list(seen.values())
+    best = min(latest, key=lambda x: x.price) if latest else None
+    return {
+        "id": p.id, "name": p.name, "box_type": p.box_type or "",
+        "notes": p.notes or "",
+        "created_at": p.created_at.isoformat() if p.created_at else "",
+        "price_count": all_prices.__len__() if hasattr(all_prices, '__len__') else p.prices.count(),
+        "retailer_count": len(seen),
+        "best_price": best.price if best else None,
+        "best_retailer": best.retailer if best else None,
+        "last_checked": all_prices[0].checked_date.isoformat() if all_prices else None,
+        "latest_by_retailer": [boxprice_to_dict(bp) for bp in latest],
     }
 
 
@@ -896,6 +954,77 @@ def expenses_stats():
         "by_category": [{"category": r.category, "total": round(r.total, 2)} for r in rows],
         "grand_total": round(grand_total, 2),
     })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Box price tracker
+# ---------------------------------------------------------------------------
+
+@app.route("/api/box-products", methods=["GET"])
+def list_box_products():
+    products = BoxProduct.query.order_by(BoxProduct.name).all()
+    return jsonify([boxproduct_to_dict(p) for p in products])
+
+
+@app.route("/api/box-products", methods=["POST"])
+def create_box_product():
+    d = request.json
+    p = BoxProduct(name=d["name"], box_type=d.get("box_type", ""), notes=d.get("notes", ""))
+    db.session.add(p)
+    db.session.commit()
+    return jsonify(boxproduct_to_dict(p)), 201
+
+
+@app.route("/api/box-products/<int:product_id>", methods=["PUT"])
+def update_box_product(product_id):
+    p = BoxProduct.query.get_or_404(product_id)
+    d = request.json
+    p.name     = d.get("name", p.name)
+    p.box_type = d.get("box_type", p.box_type)
+    p.notes    = d.get("notes", p.notes)
+    db.session.commit()
+    return jsonify(boxproduct_to_dict(p))
+
+
+@app.route("/api/box-products/<int:product_id>", methods=["DELETE"])
+def delete_box_product(product_id):
+    p = BoxProduct.query.get_or_404(product_id)
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/box-products/<int:product_id>/prices", methods=["GET"])
+def list_box_prices(product_id):
+    BoxProduct.query.get_or_404(product_id)
+    prices = BoxPrice.query.filter_by(product_id=product_id)\
+        .order_by(BoxPrice.checked_date.desc(), BoxPrice.created_at.desc()).all()
+    return jsonify([boxprice_to_dict(p) for p in prices])
+
+
+@app.route("/api/box-products/<int:product_id>/prices", methods=["POST"])
+def create_box_price(product_id):
+    BoxProduct.query.get_or_404(product_id)
+    d = request.json
+    p = BoxPrice(
+        product_id   = product_id,
+        retailer     = d["retailer"],
+        price        = float(d["price"]),
+        url          = d.get("url", ""),
+        checked_date = date.fromisoformat(d["checked_date"]) if d.get("checked_date") else date.today(),
+        notes        = d.get("notes", ""),
+    )
+    db.session.add(p)
+    db.session.commit()
+    return jsonify(boxprice_to_dict(p)), 201
+
+
+@app.route("/api/box-prices/<int:price_id>", methods=["DELETE"])
+def delete_box_price(price_id):
+    p = BoxPrice.query.get_or_404(price_id)
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

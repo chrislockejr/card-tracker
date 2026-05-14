@@ -29,10 +29,13 @@ const state = {
   sellCardId:     null,   // card being marked as sold
   sellCardType:   null,
   editExpenseId:  null,   // null = adding, number = editing
+  editProductId:  null,   // null = adding, number = editing
+  selectedProductId: null, // product currently shown in price detail panel
+  priceChart:     null,   // Chart.js instance for the price history chart
 };
 
 // Bootstrap modal instances — initialized after DOM is ready
-let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal;
+let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
@@ -41,6 +44,8 @@ document.addEventListener("DOMContentLoaded", () => {
   boxModal     = new bootstrap.Modal(document.getElementById("boxModal"));
   sellModal    = new bootstrap.Modal(document.getElementById("sellModal"));
   expenseModal = new bootstrap.Modal(document.getElementById("expenseModal"));
+  productModal = new bootstrap.Modal(document.getElementById("productModal"));
+  priceModal   = new bootstrap.Modal(document.getElementById("priceModal"));
 
   setupTabs();
   setupSearch();
@@ -71,13 +76,14 @@ function switchTab(tab) {
   });
 
   // Show only the selected tab panel
-  ["wrestling", "soccer", "sold", "portfolio"].forEach(t => {
+  ["wrestling", "soccer", "sold", "prices", "portfolio"].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle("d-none", t !== tab);
   });
 
   if (tab === "wrestling") loadWrestling();
   else if (tab === "soccer") loadSoccer();
   else if (tab === "sold") loadSold();
+  else if (tab === "prices") loadPrices();
   else if (tab === "portfolio") loadPortfolio();
 }
 
@@ -231,6 +237,229 @@ async function deleteExpense(id) {
   if (!confirm("Delete this expense?")) return;
   await fetch(`/api/expenses/${id}`, { method: "DELETE" });
   loadPortfolio();
+}
+
+
+// ---------------------------------------------------------------------------
+// Prices tab
+// ---------------------------------------------------------------------------
+
+const RETAILER_COLORS = [
+  "#0d6efd","#dc3545","#198754","#fd7e14","#6f42c1","#20c997","#ffc107","#0dcaf0",
+];
+
+async function loadPrices() {
+  const products = await fetch("/api/box-products").then(r => r.json());
+  renderProductList(products);
+  // Re-select the previously selected product if there was one
+  if (state.selectedProductId) {
+    const p = products.find(x => x.id === state.selectedProductId);
+    if (p) selectProduct(state.selectedProductId, p.name);
+  }
+}
+
+function renderProductList(products) {
+  const tbody = document.getElementById("products-tbody");
+  if (!products.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No boxes tracked yet. Click "Add Box" to start.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = products.map(p => {
+    const best = p.best_price != null ? fmt(p.best_price) : "—";
+    const isSelected = p.id === state.selectedProductId;
+    return `<tr class="cursor-pointer ${isSelected ? "table-active" : ""}" onclick="selectProduct(${p.id}, '${esc(p.name)}')">
+      <td><strong>${esc(p.name)}</strong></td>
+      <td>${p.box_type ? `<span class="badge bg-secondary">${esc(p.box_type)}</span>` : ""}</td>
+      <td>${p.retailer_count}</td>
+      <td><strong>${best}</strong></td>
+      <td>${esc(p.best_retailer || "—")}</td>
+      <td>${esc(p.last_checked || "—")}</td>
+      <td class="action-btns" onclick="event.stopPropagation()">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openProductModal(${p.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-success me-1" onclick="selectProduct(${p.id},'${esc(p.name)}'); openPriceModal()" title="Log Price"><i class="bi bi-plus-lg"></i></button>
+        <button class="btn btn-xs btn-outline-danger" onclick="deleteProduct(${p.id})" title="Delete"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function selectProduct(id, name) {
+  state.selectedProductId = id;
+  document.getElementById("price-detail-title").textContent = name;
+  document.getElementById("price-detail").classList.remove("d-none");
+
+  // Refresh the product list to update the highlighted row
+  const products = await fetch("/api/box-products").then(r => r.json());
+  renderProductList(products);
+
+  const prices = await fetch(`/api/box-products/${id}/prices`).then(r => r.json());
+  renderPriceHistory(prices);
+  renderLatestPrices(products.find(p => p.id === id));
+  renderPriceChart(prices);
+}
+
+function renderLatestPrices(product) {
+  if (!product) return;
+  const el = document.getElementById("price-latest");
+  if (!product.latest_by_retailer.length) {
+    el.innerHTML = `<p class="text-muted small">No prices logged yet.</p>`;
+    return;
+  }
+  const sorted = [...product.latest_by_retailer].sort((a, b) => a.price - b.price);
+  el.innerHTML = sorted.map((p, i) => {
+    const isBest = i === 0;
+    const link = p.url ? `<a href="${esc(p.url)}" target="_blank" class="ms-1"><i class="bi bi-box-arrow-up-right"></i></a>` : "";
+    return `<div class="d-flex justify-content-between align-items-center mb-1">
+      <span>${isBest ? '<i class="bi bi-trophy-fill text-warning me-1"></i>' : ""}${esc(p.retailer)}${link}</span>
+      <strong class="${isBest ? "gain" : ""}">${fmt(p.price)}</strong>
+    </div>`;
+  }).join("");
+}
+
+function renderPriceHistory(prices) {
+  const tbody = document.getElementById("price-history-tbody");
+  if (!prices.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">No prices logged yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = prices.map(p => {
+    const link = p.url
+      ? `<a href="${esc(p.url)}" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="bi bi-box-arrow-up-right"></i></a>`
+      : "—";
+    return `<tr>
+      <td>${esc(p.checked_date)}</td>
+      <td>${esc(p.retailer)}</td>
+      <td><strong>${fmt(p.price)}</strong></td>
+      <td>${link}</td>
+      <td class="notes-cell" title="${esc(p.notes)}">${esc(p.notes)}</td>
+      <td class="action-btns">
+        <button class="btn btn-xs btn-outline-danger" onclick="deletePrice(${p.id})" title="Delete"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function renderPriceChart(prices) {
+  if (state.priceChart) state.priceChart.destroy();
+  if (!prices.length) return;
+
+  // Group by retailer, sort each series by date ascending
+  const byRetailer = {};
+  prices.forEach(p => {
+    if (!byRetailer[p.retailer]) byRetailer[p.retailer] = [];
+    byRetailer[p.retailer].push({ x: p.checked_date, y: p.price });
+  });
+  Object.values(byRetailer).forEach(arr => arr.sort((a, b) => a.x.localeCompare(b.x)));
+
+  const retailers = Object.keys(byRetailer);
+  const datasets  = retailers.map((retailer, i) => ({
+    label: retailer,
+    data:  byRetailer[retailer],
+    borderColor: RETAILER_COLORS[i % RETAILER_COLORS.length],
+    backgroundColor: RETAILER_COLORS[i % RETAILER_COLORS.length] + "22",
+    tension: 0.3, fill: false, pointRadius: 5, pointHoverRadius: 7,
+  }));
+
+  const ctx = document.getElementById("priceChart").getContext("2d");
+  state.priceChart = new Chart(ctx, {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true,
+      parsing: false,
+      plugins: { legend: { position: "top" } },
+      scales: {
+        x: { type: "category", title: { display: false } },
+        y: { ticks: { callback: v => "$" + v.toFixed(2) }, title: { display: false } },
+      },
+    },
+  });
+}
+
+function openProductModal(id) {
+  state.editProductId = id || null;
+  if (id) {
+    fetch("/api/box-products").then(r => r.json()).then(list => {
+      const p = list.find(x => x.id === id);
+      document.getElementById("productModalTitle").textContent = "Edit Box";
+      document.getElementById("p-name").value     = p ? p.name     : "";
+      document.getElementById("p-box_type").value = p ? p.box_type : "";
+      document.getElementById("p-notes").value    = p ? p.notes    : "";
+    });
+  } else {
+    document.getElementById("productModalTitle").textContent = "Add Box";
+    document.getElementById("p-name").value     = "";
+    document.getElementById("p-box_type").value = "";
+    document.getElementById("p-notes").value    = "";
+  }
+  document.getElementById("productSave").onclick = saveProduct;
+  productModal.show();
+}
+
+async function saveProduct() {
+  const name = document.getElementById("p-name").value.trim();
+  if (!name) { alert("Name is required."); return; }
+  const body = {
+    name,
+    box_type: document.getElementById("p-box_type").value,
+    notes:    document.getElementById("p-notes").value.trim(),
+  };
+  const url    = state.editProductId ? `/api/box-products/${state.editProductId}` : "/api/box-products";
+  const method = state.editProductId ? "PUT" : "POST";
+  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  productModal.hide();
+  loadPrices();
+}
+
+async function deleteProduct(id) {
+  if (!confirm("Delete this box and all its price history?")) return;
+  await fetch(`/api/box-products/${id}`, { method: "DELETE" });
+  if (state.selectedProductId === id) {
+    state.selectedProductId = null;
+    document.getElementById("price-detail").classList.add("d-none");
+  }
+  loadPrices();
+}
+
+function openPriceModal() {
+  if (!state.selectedProductId) { alert("Select a box first."); return; }
+  document.getElementById("pr-retailer").value = "";
+  document.getElementById("pr-price").value    = "0";
+  document.getElementById("pr-date").value     = new Date().toISOString().slice(0, 10);
+  document.getElementById("pr-url").value      = "";
+  document.getElementById("pr-notes").value    = "";
+  document.getElementById("priceSave").onclick = savePrice;
+  priceModal.show();
+}
+
+async function savePrice() {
+  const retailer = document.getElementById("pr-retailer").value.trim();
+  const price    = parseFloat(document.getElementById("pr-price").value);
+  if (!retailer) { alert("Retailer is required."); return; }
+  if (!price || price <= 0) { alert("Enter a price greater than $0."); return; }
+  const body = {
+    retailer,
+    price,
+    checked_date: document.getElementById("pr-date").value,
+    url:          document.getElementById("pr-url").value.trim(),
+    notes:        document.getElementById("pr-notes").value.trim(),
+  };
+  await fetch(`/api/box-products/${state.selectedProductId}/prices`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  priceModal.hide();
+  selectProduct(state.selectedProductId, document.getElementById("price-detail-title").textContent);
+  // Refresh product list to update best price summary row
+  const products = await fetch("/api/box-products").then(r => r.json());
+  renderProductList(products);
+}
+
+async function deletePrice(id) {
+  if (!confirm("Delete this price entry?")) return;
+  await fetch(`/api/box-prices/${id}`, { method: "DELETE" });
+  selectProduct(state.selectedProductId, document.getElementById("price-detail-title").textContent);
+  const products = await fetch("/api/box-products").then(r => r.json());
+  renderProductList(products);
 }
 
 
