@@ -354,7 +354,6 @@ async function openBreakModal(id) {
   state.editBreakId = id || null;
   document.getElementById("breakModalTitle").textContent = id ? "Edit Break" : "New Break";
   document.getElementById("br-date").value  = new Date().toISOString().slice(0, 10);
-  document.getElementById("br-fees").value  = "0";
   document.getElementById("br-notes").value = "";
   document.getElementById("br-platform").value = "Whatnot";
 
