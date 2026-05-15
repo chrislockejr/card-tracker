@@ -665,36 +665,50 @@ def soccer_history(card_id):
 def portfolio_history():
     """
     Return aggregate daily value totals for the portfolio chart.
-    Groups all history rows by date and card_type, then merges them into a
-    single list of {date, wrestling, soccer, total} objects suitable for
-    Chart.js datasets.
+
+    Cards are only snapshotted when their value changes, so a naive per-date
+    sum would drop cards to zero on days they weren't updated. Instead we
+    carry each card's last known value forward: we maintain a running dict
+    of {card_id: (card_type, value)} and update it only when a new snapshot
+    exists, then sum the whole dict for every date that appears in history.
     """
-    card_type = request.args.get("type", "all")
-    rows = db.session.query(
+    card_type_filter = request.args.get("type", "all")
+
+    query = db.session.query(
         ValueHistory.recorded_at,
         ValueHistory.card_type,
-        db.func.sum(ValueHistory.value).label("total")
+        ValueHistory.card_id,
+        ValueHistory.value,
     )
-    if card_type != "all":
-        rows = rows.filter(ValueHistory.card_type == card_type)
-    rows = rows.group_by(ValueHistory.recorded_at, ValueHistory.card_type)\
-               .order_by(ValueHistory.recorded_at).all()
+    if card_type_filter != "all":
+        query = query.filter(ValueHistory.card_type == card_type_filter)
+    rows = query.order_by(ValueHistory.recorded_at, ValueHistory.card_id).all()
 
-    # Pivot into {date: {wrestling: N, soccer: N}} then flatten to a list
+    if not rows:
+        return jsonify([])
+
+    # Group snapshots by date
     by_date = {}
-    for row in rows:
-        d = row.recorded_at.isoformat()
-        if d not in by_date:
-            by_date[d] = {"wrestling": 0, "soccer": 0}
-        by_date[d][row.card_type] = round(row.total, 2)
+    for r in rows:
+        by_date.setdefault(r.recorded_at, []).append(r)
 
+    # Walk dates in order, maintaining the last known value for every card.
+    # On each date: update changed cards, then sum the full running dict.
+    last_known = {}   # {card_id: (card_type, value)}
     result = []
     for d in sorted(by_date.keys()):
+        for r in by_date[d]:
+            last_known[r.card_id] = (r.card_type, r.value)
+        totals = {"wrestling": 0.0, "soccer": 0.0}
+        for ctype, val in last_known.values():
+            totals[ctype] += val
         result.append({
-            "date": d,
-            **by_date[d],
-            "total": round(by_date[d]["wrestling"] + by_date[d]["soccer"], 2)
+            "date":      d.isoformat(),
+            "wrestling": round(totals["wrestling"], 2),
+            "soccer":    round(totals["soccer"], 2),
+            "total":     round(totals["wrestling"] + totals["soccer"], 2),
         })
+
     return jsonify(result)
 
 
