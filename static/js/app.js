@@ -1055,11 +1055,12 @@ async function showHistory(type, id, name) {
 // Add / Edit modal
 // ---------------------------------------------------------------------------
 
-function openAddModal(type) {
+async function openAddModal(type) {
   state.editId   = null;
   state.editType = type;
+  const opts = await fetch(`/api/${type}/options`).then(r => r.json());
   document.getElementById("modalTitle").textContent = `Add ${type === "wrestling" ? "Wrestling" : "Soccer"} Card`;
-  document.getElementById("modalBody").innerHTML    = type === "wrestling" ? wrestlingForm({}) : soccerForm({});
+  document.getElementById("modalBody").innerHTML    = type === "wrestling" ? wrestlingForm({}, opts) : soccerForm({}, opts);
   document.getElementById("modalSave").onclick      = saveCard;
   cardModal.show();
 }
@@ -1071,20 +1072,32 @@ async function openEditModal(type, id) {
   // There's no single-card GET endpoint, so we fetch the full list and find
   // the card by ID. For very large collections this could be slow; a dedicated
   // /api/<type>/<id> GET endpoint would be the fix if it becomes a problem.
-  const data = await fetch(`/api/${type}?page=1&per_page=10000`).then(r => r.json());
-  const c    = data.cards.find(x => x.id === id);
+  const [data, opts] = await Promise.all([
+    fetch(`/api/${type}?page=1&per_page=10000`).then(r => r.json()),
+    fetch(`/api/${type}/options`).then(r => r.json()),
+  ]);
+  const c = data.cards.find(x => x.id === id);
   if (!c) return;
 
   document.getElementById("modalTitle").textContent = `Edit ${type === "wrestling" ? "Wrestling" : "Soccer"} Card`;
-  document.getElementById("modalBody").innerHTML    = type === "wrestling" ? wrestlingForm(c) : soccerForm(c);
+  document.getElementById("modalBody").innerHTML    = type === "wrestling" ? wrestlingForm(c, opts) : soccerForm(c, opts);
   document.getElementById("modalSave").onclick      = saveCard;
   cardModal.show();
   // If this card came from a box, populate the picker and pre-select the box
   if (boxSourceSelected(c.source)) populateBoxPicker(c.box_id);
 }
 
+/**
+ * Build a <datalist> from dynamic DB values, falling back to hardcoded defaults
+ * when the database has no entries yet (fresh install).
+ */
+function datalistHtml(id, dbValues, defaults) {
+  const values = dbValues && dbValues.length ? dbValues : defaults;
+  return `<datalist id="${id}">${values.map(v => `<option value="${esc(v)}">`).join("")}</datalist>`;
+}
+
 /** Returns the HTML for the wrestling card add/edit form, pre-filled with card data. */
-function wrestlingForm(c) {
+function wrestlingForm(c, opts = {}) {
   return `
     <div class="row g-2">
       <div class="col-md-6">
@@ -1094,46 +1107,25 @@ function wrestlingForm(c) {
       <div class="col-md-6">
         <label class="form-label">Set</label>
         <input class="form-control" id="f-set_name" list="w-set-list" value="${esc(c.set_name||"")}">
-        <datalist id="w-set-list">
-          <option value="Topps Chrome WWE 2026">
-          <option value="Upper Deck AEW Allure 2026">
-          <option value="Topps Chrome WWE 2025">
-          <option value="Topps WWE 2025">
-          <option value="Panini Prizm WWE 2024">
-        </datalist>
+        ${datalistHtml("w-set-list", opts.set_name, [
+          "Topps Chrome WWE 2026","Upper Deck AEW Allure 2026","Topps Chrome WWE 2025",
+          "Topps WWE 2025","Panini Prizm WWE 2024",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Brand</label>
         <input class="form-control" id="f-brand" list="w-brand-list" value="${esc(c.brand||"")}">
-        <datalist id="w-brand-list">
-          <option value="Raw">
-          <option value="SmackDown">
-          <option value="NXT">
-          <option value="AEW">
-          <option value="WCW">
-          <option value="ECW">
-          <option value="WWF">
-        </datalist>
+        ${datalistHtml("w-brand-list", opts.brand, [
+          "Raw","SmackDown","NXT","AEW","WCW","ECW","WWF",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Type</label>
         <input class="form-control" id="f-card_type" list="w-type-list" value="${esc(c.card_type||"")}">
-        <datalist id="w-type-list">
-          <option value="Base">
-          <option value="Refractor">
-          <option value="Auto">
-          <option value="Prizm">
-          <option value="Patch">
-          <option value="Patch Auto">
-          <option value="Rookie">
-          <option value="Rookie Auto">
-          <option value="Parallel">
-          <option value="Gold">
-          <option value="Silver">
-          <option value="Bronze">
-          <option value="Superfractor">
-          <option value="1/1">
-        </datalist>
+        ${datalistHtml("w-type-list", opts.card_type, [
+          "Base","Refractor","Auto","Prizm","Patch","Patch Auto","Rookie","Rookie Auto",
+          "Parallel","Gold","Silver","Bronze","Superfractor","1/1",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Number</label>
@@ -1169,7 +1161,7 @@ function wrestlingForm(c) {
 }
 
 /** Returns the HTML for the soccer card add/edit form, pre-filled with card data. */
-function soccerForm(c) {
+function soccerForm(c, opts = {}) {
   return `
     <div class="row g-2">
       <div class="col-md-6">
@@ -1179,75 +1171,35 @@ function soccerForm(c) {
       <div class="col-md-6">
         <label class="form-label">Set</label>
         <input class="form-control" id="f-set_name" list="s-set-list" value="${esc(c.set_name||"")}">
-        <datalist id="s-set-list">
-          <option value="Donruss Road to World Cup 25-26">
-          <option value="Topps Chrome UEFA Champions League 2025">
-          <option value="Panini Prizm FIFA World Cup 2026">
-          <option value="Topps Chrome MLS 2025">
-          <option value="Panini Donruss Soccer 2025">
-        </datalist>
+        ${datalistHtml("s-set-list", opts.set_name, [
+          "Donruss Road to World Cup 25-26","Topps Chrome UEFA Champions League 2025",
+          "Panini Prizm FIFA World Cup 2026","Topps Chrome MLS 2025","Panini Donruss Soccer 2025",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Team</label>
         <input class="form-control" id="f-team" list="s-team-list" value="${esc(c.team||"")}">
-        <datalist id="s-team-list">
-          <option value="USA">
-          <option value="Brazil">
-          <option value="Argentina">
-          <option value="England">
-          <option value="France">
-          <option value="Germany">
-          <option value="Spain">
-          <option value="Portugal">
-          <option value="Netherlands">
-          <option value="Italy">
-          <option value="Mexico">
-          <option value="Japan">
-          <option value="Colombia">
-          <option value="Uruguay">
-          <option value="Belgium">
-          <option value="Croatia">
-          <option value="Morocco">
-          <option value="Senegal">
-        </datalist>
+        ${datalistHtml("s-team-list", opts.team, [
+          "USA","Brazil","Argentina","England","France","Germany","Spain","Portugal",
+          "Netherlands","Italy","Mexico","Japan","Colombia","Uruguay","Belgium",
+          "Croatia","Morocco","Senegal",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">League</label>
         <input class="form-control" id="f-league" list="s-league-list" value="${esc(c.league||"")}">
-        <datalist id="s-league-list">
-          <option value="International">
-          <option value="Premier League">
-          <option value="La Liga">
-          <option value="Bundesliga">
-          <option value="Serie A">
-          <option value="Ligue 1">
-          <option value="MLS">
-          <option value="Champions League">
-          <option value="Europa League">
-          <option value="World Cup">
-          <option value="Copa America">
-          <option value="CONCACAF">
-        </datalist>
+        ${datalistHtml("s-league-list", opts.league, [
+          "International","Premier League","La Liga","Bundesliga","Serie A","Ligue 1",
+          "MLS","Champions League","Europa League","World Cup","Copa America","CONCACAF",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Type</label>
         <input class="form-control" id="f-card_type" list="s-type-list" value="${esc(c.card_type||"")}">
-        <datalist id="s-type-list">
-          <option value="Base">
-          <option value="Refractor">
-          <option value="Auto">
-          <option value="Prizm">
-          <option value="Patch">
-          <option value="Patch Auto">
-          <option value="Rookie">
-          <option value="Rookie Auto">
-          <option value="Parallel">
-          <option value="Gold">
-          <option value="Silver">
-          <option value="Bronze">
-          <option value="Superfractor">
-          <option value="1/1">
-        </datalist>
+        ${datalistHtml("s-type-list", opts.card_type, [
+          "Base","Refractor","Auto","Prizm","Patch","Patch Auto","Rookie","Rookie Auto",
+          "Parallel","Gold","Silver","Bronze","Superfractor","1/1",
+        ])}
       </div>
       <div class="col-md-6">
         <label class="form-label">Card Number</label>

@@ -853,6 +853,35 @@ def delete_box(box_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/wrestling/options")
+def wrestling_options():
+    """Return distinct values for datalist fields, pulled from existing cards."""
+    def distinct(col):
+        return sorted(set(
+            r[0] for r in db.session.query(col).filter(col != None, col != "").distinct().all()
+        ))
+    return jsonify({
+        "set_name":  distinct(WrestlingCard.set_name),
+        "brand":     distinct(WrestlingCard.brand),
+        "card_type": distinct(WrestlingCard.card_type),
+    })
+
+
+@app.route("/api/soccer/options")
+def soccer_options():
+    """Return distinct values for datalist fields, pulled from existing cards."""
+    def distinct(col):
+        return sorted(set(
+            r[0] for r in db.session.query(col).filter(col != None, col != "").distinct().all()
+        ))
+    return jsonify({
+        "set_name":  distinct(SoccerCard.set_name),
+        "team":      distinct(SoccerCard.team),
+        "league":    distinct(SoccerCard.league),
+        "card_type": distinct(SoccerCard.card_type),
+    })
+
+
 @app.route("/api/stats")
 def stats():
     """Return card counts and total cost/value for both collections (active cards only)."""
