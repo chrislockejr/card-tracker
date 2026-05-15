@@ -276,7 +276,7 @@ function renderBreakList(breaks) {
       <td>${b.slot_count}</td>
       <td>${fmt(b.total_income)}</td>
       <td class="loss">−${fmt(b.box_cost)}</td>
-      <td class="loss">−${fmt(b.platform_fees)}</td>
+      <td class="loss">−${fmt(b.total_fees)}</td>
       <td class="${netClass}"><strong>${(b.net >= 0 ? "+" : "") + fmt(b.net)}</strong></td>
       <td class="action-btns" onclick="event.stopPropagation()">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openBreakModal(${b.id})" title="Edit"><i class="bi bi-pencil"></i></button>
@@ -299,21 +299,43 @@ async function selectBreak(id, name) {
   renderSlotTable(slots, breaks.find(b => b.id === id));
 }
 
+/** Whatnot fee formula: 8% seller + 2.9% processing + $0.30 flat per transaction. */
+function whatnotFees(price) {
+  return Math.round((price * 0.109 + 0.30) * 100) / 100;
+}
+
+function calcSlotFees() {
+  const price = parseFloat(document.getElementById("sl-price").value) || 0;
+  document.getElementById("sl-fees").value = whatnotFees(price).toFixed(2);
+  calcSlotNet();
+}
+
+function calcSlotNet() {
+  const price = parseFloat(document.getElementById("sl-price").value) || 0;
+  const fees  = parseFloat(document.getElementById("sl-fees").value)  || 0;
+  document.getElementById("sl-net").value = fmt(price - fees);
+}
+
 function renderSlotTable(slots, breakData) {
   const tbody = document.getElementById("slots-tbody");
   if (!slots.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">No slots added yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">No slots added yet.</td></tr>`;
   } else {
-    tbody.innerHTML = slots.map(s => `<tr>
-      <td>${esc(s.slot_name)}</td>
-      <td>${esc(s.buyer_name)}</td>
-      <td><strong>${fmt(s.price)}</strong></td>
-      <td class="notes-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
-      <td class="action-btns">
-        <button class="btn btn-xs btn-outline-primary me-1" onclick="openSlotModal(${s.id})" title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-danger" onclick="deleteSlot(${s.id})" title="Delete"><i class="bi bi-trash"></i></button>
-      </td>
-    </tr>`).join("");
+    tbody.innerHTML = slots.map(s => {
+      const netClass = s.net >= 0 ? "gain" : "loss";
+      return `<tr>
+        <td>${esc(s.slot_name)}</td>
+        <td>${esc(s.buyer_name)}</td>
+        <td>${fmt(s.price)}</td>
+        <td class="loss">−${fmt(s.fees)}</td>
+        <td class="${netClass}"><strong>${fmt(s.net)}</strong></td>
+        <td class="notes-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
+        <td class="action-btns">
+          <button class="btn btn-xs btn-outline-primary me-1" onclick="openSlotModal(${s.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger" onclick="deleteSlot(${s.id})" title="Delete"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join("");
   }
 
   // Totals footer
@@ -323,7 +345,7 @@ function renderSlotTable(slots, breakData) {
     totals.innerHTML = `
       <span>Income: <strong>${fmt(breakData.total_income)}</strong></span>
       <span>Box Cost: <strong class="loss">−${fmt(breakData.box_cost)}</strong></span>
-      <span>Fees: <strong class="loss">−${fmt(breakData.platform_fees)}</strong></span>
+      <span>Fees: <strong class="loss">−${fmt(breakData.total_fees)}</strong></span>
       <span>Net: <strong class="${netClass}">${(breakData.net >= 0 ? "+" : "") + fmt(breakData.net)}</strong></span>`;
   }
 }
@@ -379,10 +401,9 @@ async function saveBreak() {
   const box_ids = [...document.querySelectorAll("#br-box-list input:checked")].map(el => parseInt(el.value));
   const body = {
     name,
-    platform:      document.getElementById("br-platform").value.trim(),
-    break_date:    document.getElementById("br-date").value,
-    platform_fees: parseFloat(document.getElementById("br-fees").value) || 0,
-    notes:         document.getElementById("br-notes").value.trim(),
+    platform:   document.getElementById("br-platform").value.trim(),
+    break_date: document.getElementById("br-date").value,
+    notes:      document.getElementById("br-notes").value.trim(),
     box_ids,
   };
   const url    = state.editBreakId ? `/api/breaks/${state.editBreakId}` : "/api/breaks";
@@ -412,12 +433,16 @@ async function openSlotModal(id) {
       document.getElementById("sl-slot_name").value  = s.slot_name;
       document.getElementById("sl-buyer_name").value = s.buyer_name;
       document.getElementById("sl-price").value      = s.price;
+      document.getElementById("sl-fees").value       = s.fees.toFixed(2);
+      document.getElementById("sl-net").value        = fmt(s.net);
       document.getElementById("sl-notes").value      = s.notes;
     }
   } else {
     document.getElementById("sl-slot_name").value  = "";
     document.getElementById("sl-buyer_name").value = "";
     document.getElementById("sl-price").value      = "0";
+    document.getElementById("sl-fees").value       = "0.30";  // minimum flat fee
+    document.getElementById("sl-net").value        = fmt(-0.30);
     document.getElementById("sl-notes").value      = "";
   }
   document.getElementById("slotSave").onclick = saveSlot;
@@ -431,6 +456,7 @@ async function saveSlot() {
     slot_name:  document.getElementById("sl-slot_name").value.trim(),
     buyer_name: document.getElementById("sl-buyer_name").value.trim(),
     price,
+    fees:       parseFloat(document.getElementById("sl-fees").value) || 0,
     notes:      document.getElementById("sl-notes").value.trim(),
   };
   const url    = state.editSlotId ? `/api/break-slots/${state.editSlotId}` : `/api/breaks/${state.selectedBreakId}/slots`;

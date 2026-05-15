@@ -175,6 +175,8 @@
                 <th>Slot</th>
                 <th>Buyer</th>
                 <th>Price</th>
+                <th>Fees</th>
+                <th>Net</th>
                 <th>Notes</th>
                 <th></th>
               </tr>
@@ -427,10 +429,6 @@
             <label class="form-label">Date</label>
             <input class="form-control" type="date" id="br-date">
           </div>
-          <div class="col-md-4">
-            <label class="form-label">Platform Fees ($)</label>
-            <input class="form-control" type="number" step="0.01" id="br-fees" value="0">
-          </div>
           <div class="col-12">
             <label class="form-label">Link Box Purchases</label>
             <div class="border rounded p-2" style="max-height:160px; overflow-y:auto;" id="br-box-list">
@@ -470,9 +468,17 @@
             <label class="form-label">Buyer</label>
             <input class="form-control" id="sl-buyer_name" placeholder="Whatnot username">
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Price ($) *</label>
-            <input class="form-control" type="number" step="0.01" id="sl-price" value="0">
+            <input class="form-control" type="number" step="0.01" id="sl-price" value="0" oninput="calcSlotFees()">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Fees ($) <small class="text-muted">auto</small></label>
+            <input class="form-control" type="number" step="0.01" id="sl-fees" value="0" oninput="calcSlotNet()">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Net</label>
+            <input class="form-control" id="sl-net" readonly>
           </div>
           <div class="col-12">
             <label class="form-label">Notes</label>

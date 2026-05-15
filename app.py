@@ -105,13 +105,16 @@ class BreakBox(db.Model):
 
 
 class BreakSlot(db.Model):
-    """A single slot sold during a break — one buyer, one price."""
+    """A single slot sold during a break — one buyer, one price.
+    Fees are stored per-slot because each Whatnot transaction has its own
+    processing charge (8% seller fee + 2.9% processing + $0.30 flat)."""
     __tablename__ = "break_slots"
     id         = db.Column(db.Integer, primary_key=True)
     break_id   = db.Column(db.Integer, db.ForeignKey("breaks.id"), nullable=False)
     slot_name  = db.Column(db.String(200))   # e.g. "Team USA", "Random #7"
     buyer_name = db.Column(db.String(200))
     price      = db.Column(db.Float, nullable=False)
+    fees       = db.Column(db.Float, default=0.0)
     notes      = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -295,7 +298,9 @@ def breakslot_to_dict(s):
     return {
         "id": s.id, "break_id": s.break_id,
         "slot_name": s.slot_name or "", "buyer_name": s.buyer_name or "",
-        "price": s.price, "notes": s.notes or "",
+        "price": s.price, "fees": s.fees,
+        "net": round(s.price - s.fees, 2),
+        "notes": s.notes or "",
         "created_at": s.created_at.isoformat() if s.created_at else "",
     }
 
@@ -309,18 +314,21 @@ def break_to_dict(b):
 
     total_income = db.session.query(db.func.sum(BreakSlot.price))\
         .filter_by(break_id=b.id).scalar() or 0
+    total_fees = db.session.query(db.func.sum(BreakSlot.fees))\
+        .filter_by(break_id=b.id).scalar() or 0
     slot_count = b.slots.count()
-    net = round(total_income - box_cost - b.platform_fees, 2)
+    net = round(total_income - box_cost - total_fees, 2)
 
     return {
         "id": b.id, "name": b.name, "platform": b.platform or "",
         "break_date": b.break_date.isoformat() if b.break_date else "",
-        "platform_fees": b.platform_fees, "notes": b.notes or "",
+        "notes": b.notes or "",
         "created_at": b.created_at.isoformat() if b.created_at else "",
         "box_ids": box_ids,
         "box_names": [bx.name for bx in boxes],
         "box_cost": round(box_cost, 2),
         "total_income": round(total_income, 2),
+        "total_fees": round(total_fees, 2),
         "slot_count": slot_count,
         "net": net,
     }
@@ -1113,6 +1121,7 @@ def create_break_slot(break_id):
         slot_name  = d.get("slot_name", ""),
         buyer_name = d.get("buyer_name", ""),
         price      = float(d["price"]),
+        fees       = float(d.get("fees", 0)),
         notes      = d.get("notes", ""),
     )
     db.session.add(s)
@@ -1127,6 +1136,7 @@ def update_break_slot(slot_id):
     s.slot_name  = d.get("slot_name", s.slot_name)
     s.buyer_name = d.get("buyer_name", s.buyer_name)
     s.price      = float(d.get("price", s.price))
+    s.fees       = float(d.get("fees", s.fees))
     s.notes      = d.get("notes", s.notes)
     db.session.commit()
     return jsonify(breakslot_to_dict(s))
@@ -1144,9 +1154,8 @@ def delete_break_slot(slot_id):
 def breaks_stats():
     """Aggregate break P&L for the portfolio summary."""
     all_breaks   = Break.query.all()
-    total_income = db.session.query(db.func.sum(BreakSlot.price)).scalar() or 0
-    total_fees   = db.session.query(db.func.sum(Break.platform_fees)).scalar() or 0
-    # Box cost: sum costs of all boxes linked to any break
+    total_income   = db.session.query(db.func.sum(BreakSlot.price)).scalar() or 0
+    total_fees     = db.session.query(db.func.sum(BreakSlot.fees)).scalar() or 0
     linked_box_ids = [lb.box_id for lb in BreakBox.query.all()]
     total_box_cost = db.session.query(db.func.sum(Box.cost))\
         .filter(Box.id.in_(linked_box_ids)).scalar() or 0 if linked_box_ids else 0
@@ -1248,5 +1257,9 @@ if __name__ == "__main__":
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN box_id INTEGER REFERENCES boxes(id)"))
                 if "status" not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+            # Add fees column to break_slots if missing
+            existing_slots = [r[1] for r in conn.execute(text("PRAGMA table_info(break_slots)"))]
+            if "fees" not in existing_slots:
+                conn.execute(text("ALTER TABLE break_slots ADD COLUMN fees FLOAT DEFAULT 0.0"))
             conn.commit()
     app.run(debug=True, port=5000)
