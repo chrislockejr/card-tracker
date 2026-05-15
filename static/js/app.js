@@ -32,10 +32,13 @@ const state = {
   editProductId:  null,   // null = adding, number = editing
   selectedProductId: null, // product currently shown in price detail panel
   priceChart:     null,   // Chart.js instance for the price history chart
+  editBreakId:    null,   // null = adding, number = editing
+  selectedBreakId: null,  // break currently shown in slot detail panel
+  editSlotId:     null,
 };
 
 // Bootstrap modal instances — initialized after DOM is ready
-let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal;
+let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal, breakModal, slotModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
@@ -46,6 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
   expenseModal = new bootstrap.Modal(document.getElementById("expenseModal"));
   productModal = new bootstrap.Modal(document.getElementById("productModal"));
   priceModal   = new bootstrap.Modal(document.getElementById("priceModal"));
+  breakModal   = new bootstrap.Modal(document.getElementById("breakModal"));
+  slotModal    = new bootstrap.Modal(document.getElementById("slotModal"));
 
   setupTabs();
   setupSearch();
@@ -76,13 +81,14 @@ function switchTab(tab) {
   });
 
   // Show only the selected tab panel
-  ["wrestling", "soccer", "sold", "prices", "portfolio"].forEach(t => {
+  ["wrestling", "soccer", "sold", "breaks", "prices", "portfolio"].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle("d-none", t !== tab);
   });
 
   if (tab === "wrestling") loadWrestling();
   else if (tab === "soccer") loadSoccer();
   else if (tab === "sold") loadSold();
+  else if (tab === "breaks") loadBreaks();
   else if (tab === "prices") loadPrices();
   else if (tab === "portfolio") loadPortfolio();
 }
@@ -237,6 +243,212 @@ async function deleteExpense(id) {
   if (!confirm("Delete this expense?")) return;
   await fetch(`/api/expenses/${id}`, { method: "DELETE" });
   loadPortfolio();
+}
+
+
+// ---------------------------------------------------------------------------
+// Breaks tab
+// ---------------------------------------------------------------------------
+
+async function loadBreaks() {
+  const breaks = await fetch("/api/breaks").then(r => r.json());
+  renderBreakList(breaks);
+  if (state.selectedBreakId) {
+    const b = breaks.find(x => x.id === state.selectedBreakId);
+    if (b) selectBreak(state.selectedBreakId, b.name);
+  }
+}
+
+function renderBreakList(breaks) {
+  const tbody = document.getElementById("breaks-tbody");
+  if (!breaks.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">No breaks logged yet. Click "New Break" to add one.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = breaks.map(b => {
+    const netClass = b.net >= 0 ? "gain" : "loss";
+    const isSelected = b.id === state.selectedBreakId;
+    return `<tr class="cursor-pointer ${isSelected ? "table-active" : ""}" onclick="selectBreak(${b.id}, '${esc(b.name)}')">
+      <td><strong>${esc(b.name)}</strong></td>
+      <td>${esc(b.platform)}</td>
+      <td>${esc(b.break_date)}</td>
+      <td><small class="text-muted">${b.box_names.map(n => esc(n)).join(", ") || "—"}</small></td>
+      <td>${b.slot_count}</td>
+      <td>${fmt(b.total_income)}</td>
+      <td class="loss">−${fmt(b.box_cost)}</td>
+      <td class="loss">−${fmt(b.platform_fees)}</td>
+      <td class="${netClass}"><strong>${(b.net >= 0 ? "+" : "") + fmt(b.net)}</strong></td>
+      <td class="action-btns" onclick="event.stopPropagation()">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openBreakModal(${b.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-danger" onclick="deleteBreak(${b.id})" title="Delete"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function selectBreak(id, name) {
+  state.selectedBreakId = id;
+  document.getElementById("break-detail-title").textContent = name;
+  document.getElementById("break-detail").classList.remove("d-none");
+
+  const [breaks, slots] = await Promise.all([
+    fetch("/api/breaks").then(r => r.json()),
+    fetch(`/api/breaks/${id}/slots`).then(r => r.json()),
+  ]);
+  renderBreakList(breaks);
+  renderSlotTable(slots, breaks.find(b => b.id === id));
+}
+
+function renderSlotTable(slots, breakData) {
+  const tbody = document.getElementById("slots-tbody");
+  if (!slots.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">No slots added yet.</td></tr>`;
+  } else {
+    tbody.innerHTML = slots.map(s => `<tr>
+      <td>${esc(s.slot_name)}</td>
+      <td>${esc(s.buyer_name)}</td>
+      <td><strong>${fmt(s.price)}</strong></td>
+      <td class="notes-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
+      <td class="action-btns">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openSlotModal(${s.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-danger" onclick="deleteSlot(${s.id})" title="Delete"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join("");
+  }
+
+  // Totals footer
+  const totals = document.getElementById("break-slot-totals");
+  if (breakData) {
+    const netClass = breakData.net >= 0 ? "gain" : "loss";
+    totals.innerHTML = `
+      <span>Income: <strong>${fmt(breakData.total_income)}</strong></span>
+      <span>Box Cost: <strong class="loss">−${fmt(breakData.box_cost)}</strong></span>
+      <span>Fees: <strong class="loss">−${fmt(breakData.platform_fees)}</strong></span>
+      <span>Net: <strong class="${netClass}">${(breakData.net >= 0 ? "+" : "") + fmt(breakData.net)}</strong></span>`;
+  }
+}
+
+async function openBreakModal(id) {
+  state.editBreakId = id || null;
+  document.getElementById("breakModalTitle").textContent = id ? "Edit Break" : "New Break";
+  document.getElementById("br-date").value  = new Date().toISOString().slice(0, 10);
+  document.getElementById("br-fees").value  = "0";
+  document.getElementById("br-notes").value = "";
+  document.getElementById("br-platform").value = "Whatnot";
+
+  // Fetch boxes to populate checkbox list
+  if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
+
+  let selectedBoxIds = [];
+  if (id) {
+    const breaks = await fetch("/api/breaks").then(r => r.json());
+    const b = breaks.find(x => x.id === id);
+    if (b) {
+      document.getElementById("br-name").value     = b.name;
+      document.getElementById("br-platform").value = b.platform;
+      document.getElementById("br-date").value     = b.break_date;
+      document.getElementById("br-fees").value     = b.platform_fees;
+      document.getElementById("br-notes").value    = b.notes;
+      selectedBoxIds = b.box_ids;
+    }
+  } else {
+    document.getElementById("br-name").value = "";
+  }
+
+  const boxList = document.getElementById("br-box-list");
+  if (!state.boxes.length) {
+    boxList.innerHTML = `<span class="text-muted small">No box purchases logged yet.</span>`;
+  } else {
+    boxList.innerHTML = state.boxes.map(b => `
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${b.id}" id="brbox-${b.id}"
+          ${selectedBoxIds.includes(b.id) ? "checked" : ""}>
+        <label class="form-check-label" for="brbox-${b.id}">
+          ${esc(b.name)} <span class="text-muted">(${fmt(b.cost)})</span>
+        </label>
+      </div>`).join("");
+  }
+
+  document.getElementById("breakSave").onclick = saveBreak;
+  breakModal.show();
+}
+
+async function saveBreak() {
+  const name = document.getElementById("br-name").value.trim();
+  if (!name) { alert("Break name is required."); return; }
+  const box_ids = [...document.querySelectorAll("#br-box-list input:checked")].map(el => parseInt(el.value));
+  const body = {
+    name,
+    platform:      document.getElementById("br-platform").value.trim(),
+    break_date:    document.getElementById("br-date").value,
+    platform_fees: parseFloat(document.getElementById("br-fees").value) || 0,
+    notes:         document.getElementById("br-notes").value.trim(),
+    box_ids,
+  };
+  const url    = state.editBreakId ? `/api/breaks/${state.editBreakId}` : "/api/breaks";
+  const method = state.editBreakId ? "PUT" : "POST";
+  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  breakModal.hide();
+  loadBreaks();
+}
+
+async function deleteBreak(id) {
+  if (!confirm("Delete this break and all its slots?")) return;
+  await fetch(`/api/breaks/${id}`, { method: "DELETE" });
+  if (state.selectedBreakId === id) {
+    state.selectedBreakId = null;
+    document.getElementById("break-detail").classList.add("d-none");
+  }
+  loadBreaks();
+}
+
+async function openSlotModal(id) {
+  state.editSlotId = id || null;
+  document.getElementById("slotModalTitle").textContent = id ? "Edit Slot" : "Add Slot";
+  if (id) {
+    const slots = await fetch(`/api/breaks/${state.selectedBreakId}/slots`).then(r => r.json());
+    const s = slots.find(x => x.id === id);
+    if (s) {
+      document.getElementById("sl-slot_name").value  = s.slot_name;
+      document.getElementById("sl-buyer_name").value = s.buyer_name;
+      document.getElementById("sl-price").value      = s.price;
+      document.getElementById("sl-notes").value      = s.notes;
+    }
+  } else {
+    document.getElementById("sl-slot_name").value  = "";
+    document.getElementById("sl-buyer_name").value = "";
+    document.getElementById("sl-price").value      = "0";
+    document.getElementById("sl-notes").value      = "";
+  }
+  document.getElementById("slotSave").onclick = saveSlot;
+  slotModal.show();
+}
+
+async function saveSlot() {
+  const price = parseFloat(document.getElementById("sl-price").value);
+  if (!price || price <= 0) { alert("Enter a price greater than $0."); return; }
+  const body = {
+    slot_name:  document.getElementById("sl-slot_name").value.trim(),
+    buyer_name: document.getElementById("sl-buyer_name").value.trim(),
+    price,
+    notes:      document.getElementById("sl-notes").value.trim(),
+  };
+  const url    = state.editSlotId ? `/api/break-slots/${state.editSlotId}` : `/api/breaks/${state.selectedBreakId}/slots`;
+  const method = state.editSlotId ? "PUT" : "POST";
+  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  slotModal.hide();
+  selectBreak(state.selectedBreakId, document.getElementById("break-detail-title").textContent);
+  // Refresh break list so totals update
+  const breaks = await fetch("/api/breaks").then(r => r.json());
+  renderBreakList(breaks);
+}
+
+async function deleteSlot(id) {
+  if (!confirm("Delete this slot?")) return;
+  await fetch(`/api/break-slots/${id}`, { method: "DELETE" });
+  selectBreak(state.selectedBreakId, document.getElementById("break-detail-title").textContent);
+  const breaks = await fetch("/api/breaks").then(r => r.json());
+  renderBreakList(breaks);
 }
 
 
@@ -658,18 +870,20 @@ function renderSoccerTable(data) {
 async function loadPortfolio() {
   loadBoxes();
   loadExpenses();
-  const [stats, salesStats, expStats] = await Promise.all([
+  const [stats, salesStats, expStats, breakStats] = await Promise.all([
     fetch("/api/stats").then(r => r.json()),
     fetch("/api/sales/stats").then(r => r.json()),
     fetch("/api/expenses/stats").then(r => r.json()),
+    fetch("/api/breaks/stats").then(r => r.json()),
   ]);
   const w = stats.wrestling, s = stats.soccer, t = stats.total;
   const ss = salesStats;
   const es = expStats;
+  const bs = breakStats;
 
   const plClass = pn => pn >= 0 ? "gain" : "loss";
   const plStr   = pn => (pn >= 0 ? "+" : "") + fmt(pn);
-  const trueNet = ss.net_profit - es.grand_total;
+  const trueNet = ss.net_profit + bs.net - es.grand_total;
 
   document.getElementById("portfolio-summary").innerHTML = `
     <table class="table table-sm mb-0">
@@ -713,6 +927,19 @@ async function loadPortfolio() {
         <td><strong>Total Expenses</strong></td>
         <td class="loss"><strong>−${fmt(es.grand_total)}</strong></td>
       </tr>
+    </table>
+    <hr class="my-2">
+    <p class="fw-bold mb-1">Card Breaks (${bs.break_count} breaks)</p>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Income</th><th>Box Cost</th><th>Fees</th><th>Net</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>${fmt(bs.total_income)}</td>
+          <td class="loss">−${fmt(bs.total_box_cost)}</td>
+          <td class="loss">−${fmt(bs.total_fees)}</td>
+          <td class="${plClass(bs.net)}"><strong>${plStr(bs.net)}</strong></td>
+        </tr>
+      </tbody>
     </table>
     <hr class="my-2">
     <div class="d-flex justify-content-between align-items-center">

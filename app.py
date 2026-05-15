@@ -81,6 +81,41 @@ class Box(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Break(db.Model):
+    """A card break event (e.g. a Whatnot stream). Tracks slots sold and links to
+    the box purchases that were opened during the break."""
+    __tablename__ = "breaks"
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(200), nullable=False)
+    platform      = db.Column(db.String(100), default="Whatnot")
+    break_date    = db.Column(db.Date, default=date.today)
+    platform_fees = db.Column(db.Float, default=0.0)  # Whatnot/platform cut in dollars
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    slots         = db.relationship("BreakSlot", backref="break_event", lazy="dynamic", cascade="all, delete-orphan")
+    linked_boxes  = db.relationship("BreakBox", backref="break_event", lazy="dynamic", cascade="all, delete-orphan")
+
+
+class BreakBox(db.Model):
+    """Junction table linking a Break to one or more Box purchases."""
+    __tablename__ = "break_boxes"
+    id       = db.Column(db.Integer, primary_key=True)
+    break_id = db.Column(db.Integer, db.ForeignKey("breaks.id"), nullable=False)
+    box_id   = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=False)
+
+
+class BreakSlot(db.Model):
+    """A single slot sold during a break — one buyer, one price."""
+    __tablename__ = "break_slots"
+    id         = db.Column(db.Integer, primary_key=True)
+    break_id   = db.Column(db.Integer, db.ForeignKey("breaks.id"), nullable=False)
+    slot_name  = db.Column(db.String(200))   # e.g. "Team USA", "Random #7"
+    buyer_name = db.Column(db.String(200))
+    price      = db.Column(db.Float, nullable=False)
+    notes      = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class BoxProduct(db.Model):
     """A box product being price-tracked across retailers (e.g. Topps Chrome WWE 2026 Blaster).
     Separate from Box, which represents an actual purchase."""
@@ -253,6 +288,41 @@ def sale_to_dict(s):
         "platform": s.platform or "", "notes": s.notes or "",
         "sold_date": s.sold_date.isoformat() if s.sold_date else "",
         "created_at": s.created_at.isoformat() if s.created_at else "",
+    }
+
+
+def breakslot_to_dict(s):
+    return {
+        "id": s.id, "break_id": s.break_id,
+        "slot_name": s.slot_name or "", "buyer_name": s.buyer_name or "",
+        "price": s.price, "notes": s.notes or "",
+        "created_at": s.created_at.isoformat() if s.created_at else "",
+    }
+
+
+def break_to_dict(b):
+    """Serialize a Break with computed P&L from linked boxes and slots."""
+    linked = b.linked_boxes.all()
+    box_ids = [lb.box_id for lb in linked]
+    boxes   = Box.query.filter(Box.id.in_(box_ids)).all() if box_ids else []
+    box_cost = sum(bx.cost for bx in boxes)
+
+    total_income = db.session.query(db.func.sum(BreakSlot.price))\
+        .filter_by(break_id=b.id).scalar() or 0
+    slot_count = b.slots.count()
+    net = round(total_income - box_cost - b.platform_fees, 2)
+
+    return {
+        "id": b.id, "name": b.name, "platform": b.platform or "",
+        "break_date": b.break_date.isoformat() if b.break_date else "",
+        "platform_fees": b.platform_fees, "notes": b.notes or "",
+        "created_at": b.created_at.isoformat() if b.created_at else "",
+        "box_ids": box_ids,
+        "box_names": [bx.name for bx in boxes],
+        "box_cost": round(box_cost, 2),
+        "total_income": round(total_income, 2),
+        "slot_count": slot_count,
+        "net": net,
     }
 
 
@@ -953,6 +1023,126 @@ def expenses_stats():
     return jsonify({
         "by_category": [{"category": r.category, "total": round(r.total, 2)} for r in rows],
         "grand_total": round(grand_total, 2),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Breaks
+# ---------------------------------------------------------------------------
+
+def _sync_break_boxes(break_id, box_ids):
+    """Replace the set of boxes linked to a break."""
+    BreakBox.query.filter_by(break_id=break_id).delete()
+    for box_id in (box_ids or []):
+        db.session.add(BreakBox(break_id=break_id, box_id=int(box_id)))
+
+
+@app.route("/api/breaks", methods=["GET"])
+def list_breaks():
+    breaks = Break.query.order_by(Break.break_date.desc(), Break.created_at.desc()).all()
+    return jsonify([break_to_dict(b) for b in breaks])
+
+
+@app.route("/api/breaks", methods=["POST"])
+def create_break():
+    d = request.json
+    b = Break(
+        name          = d["name"],
+        platform      = d.get("platform", "Whatnot"),
+        break_date    = date.fromisoformat(d["break_date"]) if d.get("break_date") else date.today(),
+        platform_fees = float(d.get("platform_fees", 0)),
+        notes         = d.get("notes", ""),
+    )
+    db.session.add(b)
+    db.session.flush()
+    _sync_break_boxes(b.id, d.get("box_ids", []))
+    db.session.commit()
+    return jsonify(break_to_dict(b)), 201
+
+
+@app.route("/api/breaks/<int:break_id>", methods=["PUT"])
+def update_break(break_id):
+    b = Break.query.get_or_404(break_id)
+    d = request.json
+    b.name          = d.get("name", b.name)
+    b.platform      = d.get("platform", b.platform)
+    b.break_date    = date.fromisoformat(d["break_date"]) if d.get("break_date") else b.break_date
+    b.platform_fees = float(d.get("platform_fees", b.platform_fees))
+    b.notes         = d.get("notes", b.notes)
+    _sync_break_boxes(b.id, d.get("box_ids", []))
+    db.session.commit()
+    return jsonify(break_to_dict(b))
+
+
+@app.route("/api/breaks/<int:break_id>", methods=["DELETE"])
+def delete_break(break_id):
+    b = Break.query.get_or_404(break_id)
+    db.session.delete(b)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/breaks/<int:break_id>/slots", methods=["GET"])
+def list_break_slots(break_id):
+    Break.query.get_or_404(break_id)
+    slots = BreakSlot.query.filter_by(break_id=break_id)\
+        .order_by(BreakSlot.created_at).all()
+    return jsonify([breakslot_to_dict(s) for s in slots])
+
+
+@app.route("/api/breaks/<int:break_id>/slots", methods=["POST"])
+def create_break_slot(break_id):
+    Break.query.get_or_404(break_id)
+    d = request.json
+    s = BreakSlot(
+        break_id   = break_id,
+        slot_name  = d.get("slot_name", ""),
+        buyer_name = d.get("buyer_name", ""),
+        price      = float(d["price"]),
+        notes      = d.get("notes", ""),
+    )
+    db.session.add(s)
+    db.session.commit()
+    return jsonify(breakslot_to_dict(s)), 201
+
+
+@app.route("/api/break-slots/<int:slot_id>", methods=["PUT"])
+def update_break_slot(slot_id):
+    s = BreakSlot.query.get_or_404(slot_id)
+    d = request.json
+    s.slot_name  = d.get("slot_name", s.slot_name)
+    s.buyer_name = d.get("buyer_name", s.buyer_name)
+    s.price      = float(d.get("price", s.price))
+    s.notes      = d.get("notes", s.notes)
+    db.session.commit()
+    return jsonify(breakslot_to_dict(s))
+
+
+@app.route("/api/break-slots/<int:slot_id>", methods=["DELETE"])
+def delete_break_slot(slot_id):
+    s = BreakSlot.query.get_or_404(slot_id)
+    db.session.delete(s)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/breaks/stats")
+def breaks_stats():
+    """Aggregate break P&L for the portfolio summary."""
+    all_breaks   = Break.query.all()
+    total_income = db.session.query(db.func.sum(BreakSlot.price)).scalar() or 0
+    total_fees   = db.session.query(db.func.sum(Break.platform_fees)).scalar() or 0
+    # Box cost: sum costs of all boxes linked to any break
+    linked_box_ids = [lb.box_id for lb in BreakBox.query.all()]
+    total_box_cost = db.session.query(db.func.sum(Box.cost))\
+        .filter(Box.id.in_(linked_box_ids)).scalar() or 0 if linked_box_ids else 0
+    net = round(total_income - total_box_cost - total_fees, 2)
+    return jsonify({
+        "break_count":     len(all_breaks),
+        "total_income":    round(total_income, 2),
+        "total_box_cost":  round(total_box_cost, 2),
+        "total_fees":      round(total_fees, 2),
+        "net":             net,
     })
 
 

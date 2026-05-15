@@ -23,6 +23,7 @@
     <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="sold">Sold</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="breaks">Breaks</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="prices">Prices</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
   </ul>
@@ -133,6 +134,57 @@
       </table>
     </div>
     <div id="sold-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
+  <!-- Breaks Tab -->
+  <div id="tab-breaks" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="text-muted small">Track card break events and slot income.</span>
+      <button class="btn btn-sm btn-primary" onclick="openBreakModal()"><i class="bi bi-plus-lg"></i> New Break</button>
+    </div>
+    <div class="table-responsive mb-4">
+      <table class="table table-sm table-hover align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>Break</th>
+            <th>Platform</th>
+            <th>Date</th>
+            <th>Boxes</th>
+            <th>Slots</th>
+            <th>Income</th>
+            <th>Box Cost</th>
+            <th>Fees</th>
+            <th>Net P&amp;L</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="breaks-tbody"></tbody>
+      </table>
+    </div>
+    <!-- Slot detail panel -->
+    <div id="break-detail" class="d-none">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-bold" id="break-detail-title"></span>
+          <button class="btn btn-sm btn-primary" onclick="openSlotModal()"><i class="bi bi-plus-lg"></i> Add Slot</button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Slot</th>
+                <th>Buyer</th>
+                <th>Price</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="slots-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex gap-4" id="break-slot-totals"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Prices Tab -->
@@ -341,6 +393,96 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" id="boxSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New/Edit Break Modal -->
+<div class="modal fade" id="breakModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="breakModalTitle">New Break</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-8">
+            <label class="form-label">Break Name *</label>
+            <input class="form-control" id="br-name" placeholder="e.g. Topps Chrome WWE 2026 Blaster Break #1">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Platform</label>
+            <input class="form-control" id="br-platform" list="break-platform-list" value="Whatnot">
+            <datalist id="break-platform-list">
+              <option value="Whatnot">
+              <option value="YouTube">
+              <option value="Facebook Live">
+              <option value="Instagram Live">
+              <option value="Other">
+            </datalist>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" id="br-date">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Platform Fees ($)</label>
+            <input class="form-control" type="number" step="0.01" id="br-fees" value="0">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Link Box Purchases</label>
+            <div class="border rounded p-2" style="max-height:160px; overflow-y:auto;" id="br-box-list">
+              <span class="text-muted small">Loading boxes...</span>
+            </div>
+            <small class="text-muted">Select the box(es) opened during this break. Box cost is pulled automatically.</small>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="br-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="breakSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Slot Modal -->
+<div class="modal fade" id="slotModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="slotModalTitle">Add Slot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Slot Name</label>
+            <input class="form-control" id="sl-slot_name" placeholder="e.g. Team USA, Random #3">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Buyer</label>
+            <input class="form-control" id="sl-buyer_name" placeholder="Whatnot username">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Price ($) *</label>
+            <input class="form-control" type="number" step="0.01" id="sl-price" value="0">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="sl-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="slotSave">Save</button>
       </div>
     </div>
   </div>
