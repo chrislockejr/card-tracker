@@ -368,7 +368,6 @@ async function openBreakModal(id) {
       document.getElementById("br-name").value     = b.name;
       document.getElementById("br-platform").value = b.platform;
       document.getElementById("br-date").value     = b.break_date;
-      document.getElementById("br-fees").value     = b.platform_fees;
       document.getElementById("br-notes").value    = b.notes;
       selectedBoxIds = b.box_ids;
     }
