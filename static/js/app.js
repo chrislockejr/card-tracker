@@ -272,7 +272,7 @@ function renderBreakList(breaks) {
       <td><strong>${esc(b.name)}</strong></td>
       <td>${esc(b.platform)}</td>
       <td>${esc(b.break_date)}</td>
-      <td><small class="text-muted">${b.box_names.map(n => esc(n)).join(", ") || "—"}</small></td>
+      <td class="break-boxes-cell" title="${esc(b.box_names.join(", "))}"><small class="text-muted">${esc(b.box_names.join(", ")) || "—"}</small></td>
       <td>${b.slot_count}</td>
       <td>${fmt(b.total_income)}</td>
       <td class="loss">−${fmt(b.box_cost)}</td>
