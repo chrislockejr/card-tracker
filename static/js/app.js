@@ -299,14 +299,22 @@ async function selectBreak(id, name) {
   renderSlotTable(slots, breaks.find(b => b.id === id));
 }
 
-/** Whatnot fee formula: 8% seller + 2.9% processing + $0.30 flat per transaction. */
-function whatnotFees(price) {
-  return Math.round((price * 0.109 + 0.30) * 100) / 100;
+/**
+ * Whatnot fee formula:
+ *   8% commission on sale price
+ *   2.9% processing on total order value (sale + shipping + tax) + $0.30 flat
+ * Order total defaults to sale price when shipping/tax aren't known.
+ */
+function whatnotFees(price, orderTotal) {
+  const commission  = price * 0.08;
+  const processing  = (orderTotal || price) * 0.029 + 0.30;
+  return Math.round((commission + processing) * 100) / 100;
 }
 
 function calcSlotFees() {
-  const price = parseFloat(document.getElementById("sl-price").value) || 0;
-  document.getElementById("sl-fees").value = whatnotFees(price).toFixed(2);
+  const price      = parseFloat(document.getElementById("sl-price").value)      || 0;
+  const orderTotal = parseFloat(document.getElementById("sl-order-total").value) || price;
+  document.getElementById("sl-fees").value = whatnotFees(price, orderTotal).toFixed(2);
   calcSlotNet();
 }
 
@@ -428,20 +436,22 @@ async function openSlotModal(id) {
     const slots = await fetch(`/api/breaks/${state.selectedBreakId}/slots`).then(r => r.json());
     const s = slots.find(x => x.id === id);
     if (s) {
-      document.getElementById("sl-slot_name").value  = s.slot_name;
-      document.getElementById("sl-buyer_name").value = s.buyer_name;
-      document.getElementById("sl-price").value      = s.price;
-      document.getElementById("sl-fees").value       = s.fees.toFixed(2);
-      document.getElementById("sl-net").value        = fmt(s.net);
-      document.getElementById("sl-notes").value      = s.notes;
+      document.getElementById("sl-slot_name").value   = s.slot_name;
+      document.getElementById("sl-buyer_name").value  = s.buyer_name;
+      document.getElementById("sl-price").value       = s.price;
+      document.getElementById("sl-order-total").value = s.price;  // best guess when editing
+      document.getElementById("sl-fees").value        = s.fees.toFixed(2);
+      document.getElementById("sl-net").value         = fmt(s.net);
+      document.getElementById("sl-notes").value       = s.notes;
     }
   } else {
-    document.getElementById("sl-slot_name").value  = "";
-    document.getElementById("sl-buyer_name").value = "";
-    document.getElementById("sl-price").value      = "0";
-    document.getElementById("sl-fees").value       = "0.30";  // minimum flat fee
-    document.getElementById("sl-net").value        = fmt(-0.30);
-    document.getElementById("sl-notes").value      = "";
+    document.getElementById("sl-slot_name").value   = "";
+    document.getElementById("sl-buyer_name").value  = "";
+    document.getElementById("sl-price").value       = "0";
+    document.getElementById("sl-order-total").value = "0";
+    document.getElementById("sl-fees").value        = "0.30";
+    document.getElementById("sl-net").value         = fmt(-0.30);
+    document.getElementById("sl-notes").value       = "";
   }
   document.getElementById("slotSave").onclick = saveSlot;
   slotModal.show();

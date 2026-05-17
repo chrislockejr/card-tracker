@@ -468,15 +468,19 @@
             <label class="form-label">Buyer</label>
             <input class="form-control" id="sl-buyer_name" placeholder="Whatnot username">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Price ($) *</label>
             <input class="form-control" type="number" step="0.01" id="sl-price" value="0" oninput="calcSlotFees()">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
+            <label class="form-label">Order Total ($) <small class="text-muted">incl. shipping &amp; tax</small></label>
+            <input class="form-control" type="number" step="0.01" id="sl-order-total" value="0" oninput="calcSlotFees()">
+          </div>
+          <div class="col-md-6">
             <label class="form-label">Fees ($) <small class="text-muted">auto</small></label>
             <input class="form-control" type="number" step="0.01" id="sl-fees" value="0" oninput="calcSlotNet()">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Net</label>
             <input class="form-control" id="sl-net" readonly>
           </div>
