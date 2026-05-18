@@ -821,7 +821,7 @@ function renderWrestlingTable(data) {
     const researchUrl  = ebayResearchUrl(`${c.wrestler_name} ${c.card_type} ${c.brand}`);
 
     return `<tr>
-      <td><strong>${esc(c.wrestler_name)}</strong></td>
+      <td><strong>${esc(c.wrestler_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
       <td>${esc(c.set_name)}</td>
       <td>${esc(c.brand)}</td>
       <td>${esc(c.card_type)}</td>
@@ -831,7 +831,7 @@ function renderWrestlingTable(data) {
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('wrestling',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
+        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('wrestling',${c.id},'${esc(c.wrestler_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
         <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
@@ -875,7 +875,7 @@ function renderSoccerTable(data) {
     const researchUrl = ebayResearchUrl(`${c.player_name} ${c.card_type} ${c.team}`);
 
     return `<tr>
-      <td><strong>${esc(c.player_name)}</strong></td>
+      <td><strong>${esc(c.player_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
       <td>${esc(c.set_name)}</td>
       <td>${esc(c.team)}</td>
       <td>${esc(c.league)}</td>
@@ -886,7 +886,7 @@ function renderSoccerTable(data) {
       <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('soccer',${c.id},'${esc(c.player_name)}')" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
+        <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('soccer',${c.id},'${esc(c.player_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
         <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')"   title="Value History"><i class="bi bi-graph-up"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
@@ -1141,7 +1141,11 @@ function wrestlingForm(c, opts = {}) {
         <label class="form-label">Card Number</label>
         <input class="form-control" id="f-card_number" value="${esc(c.card_number||"")}">
       </div>
-      <div class="col-md-6">
+      <div class="col-md-4">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" type="number" min="1" id="f-quantity" value="${c.quantity||1}">
+      </div>
+      <div class="col-md-8">
         <label class="form-label">Source</label>
         <select class="form-select" id="f-source" onchange="onSourceChange()">
           ${["Single","Blaster Box","Hobby Box","Retail Pack","Hanger Box","Mega Box","Collector Box","Trade","Gift","Other"]
@@ -1156,11 +1160,11 @@ function wrestlingForm(c, opts = {}) {
         <small class="text-muted" id="box-cost-hint"></small>
       </div>
       <div class="col-md-6">
-        <label class="form-label">Cost ($)</label>
+        <label class="form-label">Cost ($) <small class="text-muted">per card</small></label>
         <input class="form-control" type="number" step="0.01" id="f-cost" value="${c.cost||0}">
       </div>
       <div class="col-md-6">
-        <label class="form-label">Current Value ($)</label>
+        <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
         <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
       </div>
       <div class="col-12">
@@ -1215,7 +1219,11 @@ function soccerForm(c, opts = {}) {
         <label class="form-label">Card Number</label>
         <input class="form-control" id="f-card_number" value="${esc(c.card_number||"")}">
       </div>
-      <div class="col-md-6">
+      <div class="col-md-4">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" type="number" min="1" id="f-quantity" value="${c.quantity||1}">
+      </div>
+      <div class="col-md-8">
         <label class="form-label">Source</label>
         <select class="form-select" id="f-source" onchange="onSourceChange()">
           ${["Single","Blaster Box","Hobby Box","Retail Pack","Hanger Box","Mega Box","Collector Box","Trade","Gift","Other"]
@@ -1230,11 +1238,11 @@ function soccerForm(c, opts = {}) {
         <small class="text-muted" id="box-cost-hint"></small>
       </div>
       <div class="col-md-6">
-        <label class="form-label">Cost ($)</label>
+        <label class="form-label">Cost ($) <small class="text-muted">per card</small></label>
         <input class="form-control" type="number" step="0.01" id="f-cost" value="${c.cost||0}">
       </div>
       <div class="col-md-6">
-        <label class="form-label">Current Value ($)</label>
+        <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
         <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
       </div>
       <div class="col-12">
@@ -1248,6 +1256,7 @@ async function saveCard() {
   const type = state.editType;
   const source = document.getElementById("f-source").value;
   const boxId  = document.getElementById("f-box_id")?.value || null;
+  const quantity = Math.max(1, parseInt(document.getElementById("f-quantity").value) || 1);
   const body = type === "wrestling" ? {
     wrestler_name: document.getElementById("f-wrestler_name").value.trim(),
     set_name:      document.getElementById("f-set_name").value.trim(),
@@ -1256,7 +1265,7 @@ async function saveCard() {
     card_number:   document.getElementById("f-card_number").value.trim(),
     cost:          document.getElementById("f-cost").value,
     current_value: document.getElementById("f-current_value").value,
-    source, box_id: boxId || null,
+    quantity, source, box_id: boxId || null,
     notes:         document.getElementById("f-notes").value.trim(),
   } : {
     player_name:   document.getElementById("f-player_name").value.trim(),
@@ -1267,7 +1276,7 @@ async function saveCard() {
     card_number:   document.getElementById("f-card_number").value.trim(),
     cost:          document.getElementById("f-cost").value,
     current_value: document.getElementById("f-current_value").value,
-    source, box_id: boxId || null,
+    quantity, source, box_id: boxId || null,
     notes:         document.getElementById("f-notes").value.trim(),
   };
 
@@ -1390,10 +1399,11 @@ function renderSoldPagination(data) {
 function goSoldPage(page) { state.sold.page = page; loadSold(); }
 function changeSoldPerPage(val) { state.sold.perPage = parseInt(val); state.sold.page = 1; loadSold(); }
 
-function openSellModal(type, id, name) {
+function openSellModal(type, id, name, quantity) {
   state.sellCardId   = id;
   state.sellCardType = type;
-  document.getElementById("sell-card-label").textContent = `Selling: ${name}`;
+  const qtyNote = (quantity > 1) ? ` — ${quantity - 1} will remain in inventory` : "";
+  document.getElementById("sell-card-label").textContent = `Selling 1 copy: ${name}${qtyNote}`;
   document.getElementById("sell-price").value    = "0";
   document.getElementById("sell-fees").value     = "0";
   document.getElementById("sell-platform").value = "";

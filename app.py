@@ -33,6 +33,7 @@ class WrestlingCard(db.Model):
     current_value = db.Column(db.Float, default=0.0)
     source        = db.Column(db.String(50), default="Single")  # Single, Blaster Box, Hobby Box, etc.
     box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
+    quantity      = db.Column(db.Integer, default=1)
     status        = db.Column(db.String(20), default="active")  # 'active' or 'sold'
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
@@ -62,6 +63,7 @@ class SoccerCard(db.Model):
     current_value = db.Column(db.Float, default=0.0)
     source        = db.Column(db.String(50), default="Single")
     box_id        = db.Column(db.Integer, db.ForeignKey("boxes.id"), nullable=True)
+    quantity      = db.Column(db.Integer, default=1)
     status        = db.Column(db.String(20), default="active")
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
@@ -221,7 +223,10 @@ def redistribute_box_costs(box_id):
     all_cards = w_cards + s_cards
     hits = [c for c in all_cards if (c.card_type or "").strip().lower() != "base"]
     base = [c for c in all_cards if (c.card_type or "").strip().lower() == "base"]
-    per_card = round(box.cost / len(hits), 2) if hits else 0
+    # Divide box cost by total individual cards (sum of quantities), not entry count,
+    # so a quantity-2 entry costs the same per card as a quantity-1 entry.
+    total_hit_cards = sum(c.quantity or 1 for c in hits)
+    per_card = round(box.cost / total_hit_cards, 2) if total_hit_cards else 0
     for c in hits:
         c.cost = per_card
     for c in base:
@@ -251,6 +256,7 @@ def wrestling_to_dict(c):
         "card_number": c.card_number or "",
         "cost": c.cost,
         "current_value": c.current_value,
+        "quantity": c.quantity or 1,
         "source": c.source or "Single",
         "box_id": c.box_id,
         "notes": c.notes or "",
@@ -272,6 +278,7 @@ def soccer_to_dict(c):
         "year": c.year or "",
         "cost": c.cost,
         "current_value": c.current_value,
+        "quantity": c.quantity or 1,
         "source": c.source or "Single",
         "box_id": c.box_id,
         "notes": c.notes or "",
@@ -442,8 +449,8 @@ def list_wrestling():
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
     pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).filter_by(status="active").scalar() or 0
-    total_value = db.session.query(db.func.sum(WrestlingCard.current_value)).filter_by(status="active").scalar() or 0
+    total_cost  = db.session.query(db.func.sum(WrestlingCard.cost * WrestlingCard.quantity)).filter_by(status="active").scalar() or 0
+    total_value = db.session.query(db.func.sum(WrestlingCard.current_value * WrestlingCard.quantity)).filter_by(status="active").scalar() or 0
 
     return jsonify({
         "cards":       [wrestling_to_dict(c) for c in pagination.items],
@@ -467,6 +474,7 @@ def create_wrestling():
         card_number=d.get("card_number", ""),
         cost=float(d.get("cost", 0)),
         current_value=float(d.get("current_value", 0)),
+        quantity=max(1, int(d.get("quantity", 1))),
         source=d.get("source", "Single"),
         box_id=int(d["box_id"]) if d.get("box_id") else None,
         notes=d.get("notes", ""),
@@ -500,6 +508,7 @@ def update_wrestling(card_id):
         c.current_value = new_value
         record_history("wrestling", c.id, new_value)
     old_box_id   = c.box_id
+    c.quantity   = max(1, int(d.get("quantity", c.quantity or 1)))
     c.source     = d.get("source", c.source)
     c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
@@ -576,8 +585,8 @@ def list_soccer():
     query = query.order_by(col.desc() if direction == "desc" else col.asc())
 
     pagination  = query.paginate(page=page, per_page=per_page, error_out=False)
-    total_cost  = db.session.query(db.func.sum(SoccerCard.cost)).filter_by(status="active").scalar() or 0
-    total_value = db.session.query(db.func.sum(SoccerCard.current_value)).filter_by(status="active").scalar() or 0
+    total_cost  = db.session.query(db.func.sum(SoccerCard.cost * SoccerCard.quantity)).filter_by(status="active").scalar() or 0
+    total_value = db.session.query(db.func.sum(SoccerCard.current_value * SoccerCard.quantity)).filter_by(status="active").scalar() or 0
 
     return jsonify({
         "cards":       [soccer_to_dict(c) for c in pagination.items],
@@ -603,6 +612,7 @@ def create_soccer():
         year=int(d["year"]) if d.get("year") else None,
         cost=float(d.get("cost", 0)),
         current_value=float(d.get("current_value", 0)),
+        quantity=max(1, int(d.get("quantity", 1))),
         source=d.get("source", "Single"),
         box_id=int(d["box_id"]) if d.get("box_id") else None,
         notes=d.get("notes", ""),
@@ -633,6 +643,7 @@ def update_soccer(card_id):
         c.current_value = new_value
         record_history("soccer", c.id, new_value)
     old_box_id   = c.box_id
+    c.quantity   = max(1, int(d.get("quantity", c.quantity or 1)))
     c.source     = d.get("source", c.source)
     c.box_id     = int(d["box_id"]) if d.get("box_id") else (None if "box_id" in d else c.box_id)
     c.notes      = d.get("notes", c.notes)
@@ -885,12 +896,12 @@ def soccer_options():
 @app.route("/api/stats")
 def stats():
     """Return card counts and total cost/value for both collections (active cards only)."""
-    w_count = WrestlingCard.query.filter_by(status="active").count()
-    w_cost  = db.session.query(db.func.sum(WrestlingCard.cost)).filter_by(status="active").scalar() or 0
-    w_value = db.session.query(db.func.sum(WrestlingCard.current_value)).filter_by(status="active").scalar() or 0
-    s_count = SoccerCard.query.filter_by(status="active").count()
-    s_cost  = db.session.query(db.func.sum(SoccerCard.cost)).filter_by(status="active").scalar() or 0
-    s_value = db.session.query(db.func.sum(SoccerCard.current_value)).filter_by(status="active").scalar() or 0
+    w_count = db.session.query(db.func.sum(WrestlingCard.quantity)).filter_by(status="active").scalar() or 0
+    w_cost  = db.session.query(db.func.sum(WrestlingCard.cost * WrestlingCard.quantity)).filter_by(status="active").scalar() or 0
+    w_value = db.session.query(db.func.sum(WrestlingCard.current_value * WrestlingCard.quantity)).filter_by(status="active").scalar() or 0
+    s_count = db.session.query(db.func.sum(SoccerCard.quantity)).filter_by(status="active").scalar() or 0
+    s_cost  = db.session.query(db.func.sum(SoccerCard.cost * SoccerCard.quantity)).filter_by(status="active").scalar() or 0
+    s_value = db.session.query(db.func.sum(SoccerCard.current_value * SoccerCard.quantity)).filter_by(status="active").scalar() or 0
     return jsonify({
         "wrestling": {"count": w_count, "cost": round(w_cost, 2), "value": round(w_value, 2)},
         "soccer":    {"count": s_count, "cost": round(s_cost, 2), "value": round(s_value, 2)},
@@ -974,11 +985,17 @@ def create_sale():
         notes       = d.get("notes", ""),
     )
     db.session.add(sale)
-    card.status = "sold"
-    box_id = card.box_id
-    db.session.flush()
-    redistribute_box_costs(box_id)
-    db.session.commit()
+    if (card.quantity or 1) > 1:
+        # More copies remain — decrement quantity, card stays active
+        card.quantity -= 1
+        db.session.commit()
+    else:
+        # Last copy — mark as sold and redistribute box costs
+        card.status = "sold"
+        box_id = card.box_id
+        db.session.flush()
+        redistribute_box_costs(box_id)
+        db.session.commit()
     return jsonify(sale_to_dict(sale)), 201
 
 
@@ -1286,6 +1303,8 @@ if __name__ == "__main__":
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN box_id INTEGER REFERENCES boxes(id)"))
                 if "status" not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+                if "quantity" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN quantity INTEGER DEFAULT 1"))
             # Add fees column to break_slots if missing
             existing_slots = [r[1] for r in conn.execute(text("PRAGMA table_info(break_slots)"))]
             if "fees" not in existing_slots:
