@@ -1283,6 +1283,48 @@ async function saveCard() {
   const nameField = type === "wrestling" ? body.wrestler_name : body.player_name;
   if (!nameField) { alert("Name is required."); return; }
 
+  // Duplicate detection — only when adding a new card, not editing an existing one
+  if (!state.editId) {
+    const nameKey  = type === "wrestling" ? "wrestler_name" : "player_name";
+    const dupParams = new URLSearchParams({
+      [nameKey]:   nameField,
+      set_name:    body.set_name,
+      card_type:   body.card_type,
+      card_number: body.card_number,
+    });
+    const matches = await fetch(`/api/${type}/check-duplicate?${dupParams}`).then(r => r.json());
+
+    if (matches.length > 0) {
+      const existing    = matches[0];
+      const existingQty = existing.quantity || 1;
+      const newTotal    = existingQty + quantity;
+      const cardLabel   = type === "wrestling" ? existing.wrestler_name : existing.player_name;
+      const detail      = [existing.set_name, existing.card_type, existing.card_number].filter(Boolean).join(" · ");
+      const msg = `"${cardLabel}"${detail ? ` (${detail})` : ""} is already in your inventory ` +
+        `with ${existingQty} cop${existingQty === 1 ? "y" : "ies"}.\n\n` +
+        `Click OK to add to the existing entry (quantity → ${newTotal}),\n` +
+        `or Cancel to create a separate entry.`;
+
+      if (confirm(msg)) {
+        // Merge: bump the existing card's quantity and close
+        const res = await fetch(`/api/${type}/${existing.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...existing, quantity: newTotal }),
+        });
+        if (!res.ok) { alert("Error updating quantity."); return; }
+        cardModal.hide();
+        if (type === "wrestling") loadWrestling();
+        else loadSoccer();
+        loadNavStats();
+        if (state.currentTab === "portfolio") loadBoxes();
+        else state.boxes = await fetch("/api/boxes").then(r => r.json());
+        return;
+      }
+      // User clicked Cancel — fall through and create a separate entry
+    }
+  }
+
   const url    = state.editId ? `/api/${type}/${state.editId}` : `/api/${type}`;
   const method = state.editId ? "PUT" : "POST";
   const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

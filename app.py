@@ -864,6 +864,51 @@ def delete_box(box_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/wrestling/check-duplicate")
+def wrestling_check_duplicate():
+    """Exact-match lookup to detect duplicate cards before adding. All comparisons
+    are case-insensitive. Returns any active cards matching all provided fields."""
+    def norm(key):
+        return request.args.get(key, "").strip().lower()
+    name       = norm("wrestler_name")
+    set_name   = norm("set_name")
+    card_type  = norm("card_type")
+    card_number = norm("card_number")
+    if not name:
+        return jsonify([])
+    query = WrestlingCard.query.filter_by(status="active")\
+        .filter(db.func.lower(WrestlingCard.wrestler_name) == name)
+    if set_name:
+        query = query.filter(db.func.lower(WrestlingCard.set_name) == set_name)
+    if card_type:
+        query = query.filter(db.func.lower(WrestlingCard.card_type) == card_type)
+    if card_number:
+        query = query.filter(db.func.lower(WrestlingCard.card_number) == card_number)
+    return jsonify([wrestling_to_dict(c) for c in query.all()])
+
+
+@app.route("/api/soccer/check-duplicate")
+def soccer_check_duplicate():
+    """Exact-match lookup to detect duplicate soccer cards before adding."""
+    def norm(key):
+        return request.args.get(key, "").strip().lower()
+    name        = norm("player_name")
+    set_name    = norm("set_name")
+    card_type   = norm("card_type")
+    card_number = norm("card_number")
+    if not name:
+        return jsonify([])
+    query = SoccerCard.query.filter_by(status="active")\
+        .filter(db.func.lower(SoccerCard.player_name) == name)
+    if set_name:
+        query = query.filter(db.func.lower(SoccerCard.set_name) == set_name)
+    if card_type:
+        query = query.filter(db.func.lower(SoccerCard.card_type) == card_type)
+    if card_number:
+        query = query.filter(db.func.lower(SoccerCard.card_number) == card_number)
+    return jsonify([soccer_to_dict(c) for c in query.all()])
+
+
 @app.route("/api/wrestling/options")
 def wrestling_options():
     """Return distinct values for datalist fields, pulled from existing cards."""
