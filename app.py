@@ -1355,4 +1355,4 @@ if __name__ == "__main__":
             if "fees" not in existing_slots:
                 conn.execute(text("ALTER TABLE break_slots ADD COLUMN fees FLOAT DEFAULT 0.0"))
             conn.commit()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
