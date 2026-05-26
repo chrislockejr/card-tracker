@@ -23,6 +23,7 @@
     <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="sold">Sold</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="bundles">Bundles</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="breaks">Breaks</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="prices">Prices</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
@@ -35,10 +36,13 @@
       <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-set" placeholder="Filter set..."></div>
       <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-brand" placeholder="Filter brand..."></div>
       <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-type" placeholder="Filter card type..."></div>
-      <div class="col-sm-auto">
+      <div class="col-sm-auto d-flex gap-1 flex-wrap">
         <button class="btn btn-sm btn-primary" onclick="openAddModal('wrestling')"><i class="bi bi-plus-lg"></i> Add Card</button>
         <button class="btn btn-sm btn-success" onclick="exportCSV('wrestling')"><i class="bi bi-download"></i> Export CSV</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="openImport('wrestling')"><i class="bi bi-upload"></i> Import CSV</button>
+        <button class="btn btn-sm btn-outline-warning" id="w-bundle-btn" onclick="openBundleAssignModal('wrestling')" disabled>
+          <i class="bi bi-collection"></i> Bundle (<span id="w-bundle-count">0</span>)
+        </button>
       </div>
     </div>
     <div class="summary-bar mb-2" id="w-summary"></div>
@@ -46,6 +50,7 @@
       <table class="table table-sm table-hover table-striped align-middle" id="w-table">
         <thead class="table-dark sticky-top">
           <tr>
+            <th style="width:32px"><input type="checkbox" class="form-check-input" id="w-select-all" onchange="selectAllCards('wrestling', this.checked)" title="Select all"></th>
             <th class="sortable" data-col="wrestler_name" data-tab="wrestling">Wrestler <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="set_name" data-tab="wrestling">Set <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="brand" data-tab="wrestling">Brand <i class="bi bi-arrow-down-up"></i></th>
@@ -70,10 +75,13 @@
       <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-set" placeholder="Filter set..."></div>
       <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-team" placeholder="Filter team..."></div>
       <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-type" placeholder="Filter card type..."></div>
-      <div class="col-sm-auto">
+      <div class="col-sm-auto d-flex gap-1 flex-wrap">
         <button class="btn btn-sm btn-primary" onclick="openAddModal('soccer')"><i class="bi bi-plus-lg"></i> Add Card</button>
         <button class="btn btn-sm btn-success" onclick="exportCSV('soccer')"><i class="bi bi-download"></i> Export CSV</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="openImport('soccer')"><i class="bi bi-upload"></i> Import CSV</button>
+        <button class="btn btn-sm btn-outline-warning" id="s-bundle-btn" onclick="openBundleAssignModal('soccer')" disabled>
+          <i class="bi bi-collection"></i> Bundle (<span id="s-bundle-count">0</span>)
+        </button>
       </div>
     </div>
     <div class="summary-bar mb-2" id="s-summary"></div>
@@ -81,6 +89,7 @@
       <table class="table table-sm table-hover table-striped align-middle" id="s-table">
         <thead class="table-dark sticky-top">
           <tr>
+            <th style="width:32px"><input type="checkbox" class="form-check-input" id="s-select-all" onchange="selectAllCards('soccer', this.checked)" title="Select all"></th>
             <th class="sortable" data-col="player_name" data-tab="soccer">Player <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="set_name" data-tab="soccer">Set <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="team" data-tab="soccer">Team <i class="bi bi-arrow-down-up"></i></th>
@@ -134,6 +143,61 @@
       </table>
     </div>
     <div id="sold-pagination" class="d-flex justify-content-between align-items-center mt-2"></div>
+  </div>
+
+  <!-- Bundles Tab -->
+  <div id="tab-bundles" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="text-muted small">Group cards for eBay bundle listings. Select cards from Wrestling or Soccer tabs, then click Bundle.</span>
+      <button class="btn btn-sm btn-primary" onclick="openCreateBundleModal()"><i class="bi bi-plus-lg"></i> New Bundle</button>
+    </div>
+    <div class="table-responsive mb-4">
+      <table class="table table-sm table-hover align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>Bundle</th>
+            <th>Cards</th>
+            <th>Total Cost</th>
+            <th>Total Value</th>
+            <th>P&amp;L</th>
+            <th>Status</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="bundles-tbody"></tbody>
+      </table>
+    </div>
+    <!-- Detail panel — shown when a bundle row is selected -->
+    <div id="bundle-detail" class="d-none">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-bold" id="bundle-detail-title"></span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success" onclick="openSellBundleModal()"><i class="bi bi-currency-dollar"></i> Sell Bundle</button>
+            <button class="btn btn-sm btn-outline-primary" onclick="openEditBundleModal()"><i class="bi bi-pencil"></i> Edit</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="disbandSelectedBundle()"><i class="bi bi-x-circle"></i> Disband</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Set</th>
+                <th>Detail</th>
+                <th>Cost</th>
+                <th>Value</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bundle-cards-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex gap-4" id="bundle-card-totals"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Breaks Tab -->
@@ -686,6 +750,132 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-success" id="sellSave"><i class="bi bi-currency-dollar"></i> Record Sale</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit Bundle Modal -->
+<div class="modal fade" id="createBundleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="createBundleTitle">New Bundle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Bundle Name *</label>
+            <input class="form-control" id="cb-name" placeholder="e.g. WWE Refractor Lot, Soccer Autos Bundle">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="cb-notes" rows="2" placeholder="e.g. eBay listing description, target price..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="createBundleSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Cards to Bundle Modal -->
+<div class="modal fade" id="bundleAssignModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bundleAssignTitle">Add to Bundle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3" id="bundleAssignSubtitle"></p>
+        <!-- Toggle new vs existing -->
+        <div class="btn-group w-100 mb-3" role="group">
+          <input type="radio" class="btn-check" name="bundleMode" id="bm-new" value="new" checked>
+          <label class="btn btn-outline-primary" for="bm-new">Create new bundle</label>
+          <input type="radio" class="btn-check" name="bundleMode" id="bm-existing" value="existing">
+          <label class="btn btn-outline-primary" for="bm-existing">Add to existing</label>
+        </div>
+        <!-- New bundle fields -->
+        <div id="ba-new-fields">
+          <div class="mb-2">
+            <label class="form-label">Bundle Name *</label>
+            <input class="form-control" id="ba-name" placeholder="e.g. WWE Refractor Lot">
+          </div>
+          <div>
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="ba-notes" rows="2"></textarea>
+          </div>
+        </div>
+        <!-- Existing bundle picker -->
+        <div id="ba-existing-fields" class="d-none">
+          <label class="form-label">Select Bundle *</label>
+          <select class="form-select" id="ba-bundle-select">
+            <option value="">— select a bundle —</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="bundleAssignSave"><i class="bi bi-collection"></i> Add to Bundle</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sell Bundle Modal -->
+<div class="modal fade" id="sellBundleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sellBundleTitle">Sell Bundle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Card summary -->
+        <div class="mb-3">
+          <p class="fw-bold mb-1 small text-muted">CARDS IN BUNDLE</p>
+          <div id="sell-bundle-card-list" class="border rounded p-2 bg-light" style="max-height:160px;overflow-y:auto;font-size:0.85rem;"></div>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Total Sale Price ($) *</label>
+            <input class="form-control" type="number" step="0.01" id="sb-price" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Fees ($)</label>
+            <input class="form-control" type="number" step="0.01" id="sb-fees" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Platform</label>
+            <input class="form-control" id="sb-platform" list="sb-platform-list" placeholder="e.g. eBay">
+            <datalist id="sb-platform-list">
+              <option value="eBay">
+              <option value="COMC">
+              <option value="Facebook Marketplace">
+              <option value="Instagram">
+              <option value="Trade">
+              <option value="Local">
+              <option value="Other">
+            </datalist>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" id="sb-date">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="sb-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success" id="sellBundleSave"><i class="bi bi-currency-dollar"></i> Record Bundle Sale</button>
       </div>
     </div>
   </div>

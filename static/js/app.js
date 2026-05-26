@@ -35,10 +35,16 @@ const state = {
   editBreakId:    null,   // null = adding, number = editing
   selectedBreakId: null,  // break currently shown in slot detail panel
   editSlotId:     null,
+  // Bundles
+  selectedBundleId: null,  // bundle currently shown in detail panel
+  editBundleId:   null,
+  bundles:        [],      // cached bundle list
+  selectedCards:  { wrestling: new Set(), soccer: new Set() },  // checked card IDs per tab
 };
 
 // Bootstrap modal instances — initialized after DOM is ready
-let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal, breakModal, slotModal;
+let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal, breakModal, slotModal,
+    createBundleModal, bundleAssignModal, sellBundleModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
@@ -49,8 +55,20 @@ document.addEventListener("DOMContentLoaded", () => {
   expenseModal = new bootstrap.Modal(document.getElementById("expenseModal"));
   productModal = new bootstrap.Modal(document.getElementById("productModal"));
   priceModal   = new bootstrap.Modal(document.getElementById("priceModal"));
-  breakModal   = new bootstrap.Modal(document.getElementById("breakModal"));
-  slotModal    = new bootstrap.Modal(document.getElementById("slotModal"));
+  breakModal        = new bootstrap.Modal(document.getElementById("breakModal"));
+  slotModal         = new bootstrap.Modal(document.getElementById("slotModal"));
+  createBundleModal = new bootstrap.Modal(document.getElementById("createBundleModal"));
+  bundleAssignModal = new bootstrap.Modal(document.getElementById("bundleAssignModal"));
+  sellBundleModal   = new bootstrap.Modal(document.getElementById("sellBundleModal"));
+
+  // Toggle new/existing fields in the bundle assign modal
+  document.querySelectorAll("input[name='bundleMode']").forEach(el => {
+    el.addEventListener("change", () => {
+      const isNew = document.getElementById("bm-new").checked;
+      document.getElementById("ba-new-fields").classList.toggle("d-none", !isNew);
+      document.getElementById("ba-existing-fields").classList.toggle("d-none", isNew);
+    });
+  });
 
   setupTabs();
   setupSearch();
@@ -81,13 +99,14 @@ function switchTab(tab) {
   });
 
   // Show only the selected tab panel
-  ["wrestling", "soccer", "sold", "breaks", "prices", "portfolio"].forEach(t => {
+  ["wrestling", "soccer", "sold", "bundles", "breaks", "prices", "portfolio"].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle("d-none", t !== tab);
   });
 
   if (tab === "wrestling") loadWrestling();
   else if (tab === "soccer") loadSoccer();
   else if (tab === "sold") loadSold();
+  else if (tab === "bundles") loadBundles();
   else if (tab === "breaks") loadBreaks();
   else if (tab === "prices") loadPrices();
   else if (tab === "portfolio") loadPortfolio();
@@ -808,20 +827,23 @@ async function loadWrestling() {
 function renderWrestlingTable(data) {
   const tbody = document.getElementById("w-tbody");
   if (!data.cards.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No cards found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">No cards found.</td></tr>`;
     return;
   }
   tbody.innerHTML = data.cards.map(c => {
     const gain      = c.current_value - c.cost;
     const gainClass = gain >= 0 ? "gain" : "loss";
     const gainStr   = (gain >= 0 ? "+" : "") + fmt(gain);
+    const isChecked = state.selectedCards.wrestling.has(c.id);
 
     // Build search URLs from card data so users can quickly check market prices
     const ebayQ        = encodeURIComponent(`${c.wrestler_name} ${c.card_type} ${c.brand} wrestling card`);
     const researchUrl  = ebayResearchUrl(`${c.wrestler_name} ${c.card_type} ${c.brand}`);
+    const bundleBadge  = c.bundle_id ? `<span class="badge bg-warning text-dark ms-1" title="In a bundle"><i class="bi bi-collection"></i></span>` : "";
 
     return `<tr>
-      <td><strong>${esc(c.wrestler_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
+      <td><input type="checkbox" class="form-check-input" ${isChecked ? "checked" : ""} onchange="onCardCheck('wrestling',${c.id},this.checked)"></td>
+      <td><strong>${esc(c.wrestler_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}${bundleBadge}</td>
       <td>${esc(c.set_name)}</td>
       <td>${esc(c.brand)}</td>
       <td>${esc(c.card_type)}</td>
@@ -864,18 +886,21 @@ async function loadSoccer() {
 function renderSoccerTable(data) {
   const tbody = document.getElementById("s-tbody");
   if (!data.cards.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No cards found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted py-4">No cards found.</td></tr>`;
     return;
   }
   tbody.innerHTML = data.cards.map(c => {
     const gain      = c.current_value - c.cost;
     const gainClass = gain >= 0 ? "gain" : "loss";
     const gainStr   = (gain >= 0 ? "+" : "") + fmt(gain);
+    const isChecked = state.selectedCards.soccer.has(c.id);
     const ebayQ       = encodeURIComponent(`${c.player_name} ${c.card_type} ${c.team} soccer card`);
     const researchUrl = ebayResearchUrl(`${c.player_name} ${c.card_type} ${c.team}`);
+    const bundleBadge = c.bundle_id ? `<span class="badge bg-warning text-dark ms-1" title="In a bundle"><i class="bi bi-collection"></i></span>` : "";
 
     return `<tr>
-      <td><strong>${esc(c.player_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
+      <td><input type="checkbox" class="form-check-input" ${isChecked ? "checked" : ""} onchange="onCardCheck('soccer',${c.id},this.checked)"></td>
+      <td><strong>${esc(c.player_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}${bundleBadge}</td>
       <td>${esc(c.set_name)}</td>
       <td>${esc(c.team)}</td>
       <td>${esc(c.league)}</td>
@@ -1382,9 +1407,12 @@ function renderSoldTable(data) {
     const badge   = s.card_type === "wrestling"
       ? `<span class="badge bg-danger">W</span>`
       : `<span class="badge bg-primary">S</span>`;
+    const bundleBadge = s.bundle_name
+      ? ` <span class="badge bg-warning text-dark" title="Bundle: ${esc(s.bundle_name)}"><i class="bi bi-collection"></i> ${esc(s.bundle_name)}</span>`
+      : "";
     return `<tr>
       <td>${badge}</td>
-      <td><strong>${esc(s.name)}</strong></td>
+      <td><strong>${esc(s.name)}</strong>${bundleBadge}</td>
       <td>${esc(s.set_name)}</td>
       <td><small class="text-muted">${esc(s.card_detail)}${s.card_number ? " #"+esc(s.card_number) : ""}</small></td>
       <td>${esc(s.sold_date)}</td>
@@ -1483,6 +1511,310 @@ async function unarchiveSale(saleId) {
   await fetch(`/api/sales/${saleId}`, { method: "DELETE" });
   loadSold();
   loadNavStats();
+}
+
+
+// ---------------------------------------------------------------------------
+// Bundles tab
+// ---------------------------------------------------------------------------
+
+async function loadBundles() {
+  state.bundles = await fetch("/api/bundles").then(r => r.json());
+  renderBundleList(state.bundles);
+  if (state.selectedBundleId) {
+    const b = state.bundles.find(x => x.id === state.selectedBundleId);
+    if (b) renderBundleDetail(b);
+  }
+}
+
+function renderBundleList(bundles) {
+  const tbody = document.getElementById("bundles-tbody");
+  if (!bundles.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No bundles yet. Select cards from Wrestling or Soccer tabs and click Bundle, or click "New Bundle" above.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = bundles.map(b => {
+    const pl        = b.total_value - b.total_cost;
+    const plClass   = pl >= 0 ? "gain" : "loss";
+    const isSelected = b.id === state.selectedBundleId;
+    const statusBadge = b.status === "sold"
+      ? `<span class="badge bg-success">Sold</span>`
+      : `<span class="badge bg-primary">Active</span>`;
+    return `<tr class="cursor-pointer ${isSelected ? "table-active" : ""}" onclick="selectBundle(${b.id})">
+      <td><strong>${esc(b.name)}</strong></td>
+      <td>${b.card_count}</td>
+      <td>${fmt(b.total_cost)}</td>
+      <td>${fmt(b.total_value)}</td>
+      <td class="${plClass}">${(pl >= 0 ? "+" : "") + fmt(pl)}</td>
+      <td>${statusBadge}</td>
+      <td class="notes-cell" title="${esc(b.notes)}">${esc(b.notes)}</td>
+      <td class="action-btns" onclick="event.stopPropagation()">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditBundleModal(${b.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-xs btn-outline-danger" onclick="disbandBundle(${b.id})" title="Disband & delete"><i class="bi bi-x-circle"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function selectBundle(id) {
+  state.selectedBundleId = id;
+  const b = state.bundles.find(x => x.id === id);
+  if (b) renderBundleDetail(b);
+  renderBundleList(state.bundles); // re-render to highlight selected row
+}
+
+function renderBundleDetail(b) {
+  document.getElementById("bundle-detail-title").textContent = b.name;
+  document.getElementById("bundle-detail").classList.remove("d-none");
+
+  const tbody = document.getElementById("bundle-cards-tbody");
+  const isSold = b.status === "sold";
+
+  // Hide sell/edit/disband buttons for sold bundles
+  document.querySelector("#bundle-detail .btn-success").classList.toggle("d-none", isSold);
+  document.querySelector("#bundle-detail .btn-outline-danger").classList.toggle("d-none", isSold);
+  document.querySelector("#bundle-detail .btn-outline-primary").classList.toggle("d-none", isSold);
+
+  if (!b.cards.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${isSold ? "Bundle sold — cards moved to Sold ledger." : "No cards in this bundle yet."}</td></tr>`;
+  } else {
+    tbody.innerHTML = b.cards.map(c => {
+      const badge = c.label_type === "wrestling"
+        ? `<span class="badge bg-danger">W</span>`
+        : `<span class="badge bg-primary">S</span>`;
+      return `<tr>
+        <td>${badge}</td>
+        <td><strong>${esc(c.display_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
+        <td>${esc(c.set_name)}</td>
+        <td><small class="text-muted">${esc(c.display_detail)}</small></td>
+        <td>${fmt(c.cost)}</td>
+        <td>${fmt(c.current_value)}</td>
+        <td class="action-btns">
+          ${isSold ? "" : `<button class="btn btn-xs btn-outline-danger" onclick="removeCardFromBundle('${c.label_type}',${c.id})" title="Remove from bundle"><i class="bi bi-x-lg"></i></button>`}
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  const totals = document.getElementById("bundle-card-totals");
+  const pl = b.total_value - b.total_cost;
+  const plClass = pl >= 0 ? "gain" : "loss";
+  totals.innerHTML = `
+    <span>${b.card_count} card${b.card_count !== 1 ? "s" : ""}</span>
+    <span>Total Cost: <strong>${fmt(b.total_cost)}</strong></span>
+    <span>Total Value: <strong>${fmt(b.total_value)}</strong></span>
+    <span>P&L: <strong class="${plClass}">${(pl >= 0 ? "+" : "") + fmt(pl)}</strong></span>`;
+}
+
+// --- Create / Edit bundle ---
+
+function openCreateBundleModal() {
+  state.editBundleId = null;
+  document.getElementById("createBundleTitle").textContent = "New Bundle";
+  document.getElementById("cb-name").value  = "";
+  document.getElementById("cb-notes").value = "";
+  document.getElementById("createBundleSave").onclick = saveBundle;
+  createBundleModal.show();
+}
+
+function openEditBundleModal(id) {
+  const bundleId = id || state.selectedBundleId;
+  if (!bundleId) return;
+  state.editBundleId = bundleId;
+  const b = state.bundles.find(x => x.id === bundleId);
+  if (!b) return;
+  document.getElementById("createBundleTitle").textContent = "Edit Bundle";
+  document.getElementById("cb-name").value  = b.name;
+  document.getElementById("cb-notes").value = b.notes;
+  document.getElementById("createBundleSave").onclick = saveBundle;
+  createBundleModal.show();
+}
+
+async function saveBundle() {
+  const name = document.getElementById("cb-name").value.trim();
+  if (!name) { alert("Bundle name is required."); return; }
+  const body = { name, notes: document.getElementById("cb-notes").value.trim() };
+  const url    = state.editBundleId ? `/api/bundles/${state.editBundleId}` : "/api/bundles";
+  const method = state.editBundleId ? "PUT" : "POST";
+  const res  = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const saved = await res.json();
+  createBundleModal.hide();
+  await loadBundles();
+  // If we just created a new bundle and we're on the bundles tab, select it
+  if (!state.editBundleId) selectBundle(saved.id);
+}
+
+async function disbandBundle(id) {
+  const bundleId = id || state.selectedBundleId;
+  if (!bundleId) return;
+  const b = state.bundles.find(x => x.id === bundleId);
+  if (!confirm(`Disband "${b ? b.name : "this bundle"}"? All cards will return to regular inventory.`)) return;
+  await fetch(`/api/bundles/${bundleId}`, { method: "DELETE" });
+  if (state.selectedBundleId === bundleId) {
+    state.selectedBundleId = null;
+    document.getElementById("bundle-detail").classList.add("d-none");
+  }
+  await loadBundles();
+}
+
+function disbandSelectedBundle() {
+  disbandBundle(state.selectedBundleId);
+}
+
+// --- Assign cards to bundle from inventory tabs ---
+
+async function openBundleAssignModal(tab) {
+  const selected = state.selectedCards[tab];
+  if (!selected.size) return;
+
+  // Reset to "new bundle" mode
+  document.getElementById("bm-new").checked = true;
+  document.getElementById("ba-new-fields").classList.remove("d-none");
+  document.getElementById("ba-existing-fields").classList.add("d-none");
+
+  const count = selected.size;
+  document.getElementById("bundleAssignTitle").textContent = `Add ${count} card${count !== 1 ? "s" : ""} to Bundle`;
+  document.getElementById("bundleAssignSubtitle").textContent =
+    `${count} card${count !== 1 ? "s" : ""} selected from the ${tab} tab.`;
+  document.getElementById("ba-name").value  = "";
+  document.getElementById("ba-notes").value = "";
+
+  // Populate the existing-bundle dropdown with active bundles
+  if (!state.bundles.length) state.bundles = await fetch("/api/bundles").then(r => r.json());
+  const activeBundles = state.bundles.filter(b => b.status === "active");
+  const sel = document.getElementById("ba-bundle-select");
+  sel.innerHTML = `<option value="">— select a bundle —</option>` +
+    activeBundles.map(b => `<option value="${b.id}">${esc(b.name)} (${b.card_count} cards)</option>`).join("");
+
+  document.getElementById("bundleAssignSave").onclick = () => saveBundleAssign(tab);
+  bundleAssignModal.show();
+}
+
+async function saveBundleAssign(tab) {
+  const isNew = document.getElementById("bm-new").checked;
+  const cards = [...state.selectedCards[tab]].map(id => ({ type: tab, id }));
+
+  let bundleId;
+  if (isNew) {
+    const name = document.getElementById("ba-name").value.trim();
+    if (!name) { alert("Bundle name is required."); return; }
+    const body = { name, notes: document.getElementById("ba-notes").value.trim() };
+    const res  = await fetch("/api/bundles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const newBundle = await res.json();
+    bundleId = newBundle.id;
+  } else {
+    bundleId = parseInt(document.getElementById("ba-bundle-select").value);
+    if (!bundleId) { alert("Select a bundle."); return; }
+  }
+
+  await fetch(`/api/bundles/${bundleId}/cards`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cards }),
+  });
+
+  bundleAssignModal.hide();
+  // Clear selections
+  state.selectedCards[tab].clear();
+  updateBundleButton(tab);
+  // Refresh the inventory tab so bundle badges appear
+  if (tab === "wrestling") loadWrestling();
+  else loadSoccer();
+  // Refresh bundle cache
+  state.bundles = await fetch("/api/bundles").then(r => r.json());
+}
+
+// --- Remove a card from the currently-selected bundle ---
+
+async function removeCardFromBundle(cardType, cardId) {
+  if (!state.selectedBundleId) return;
+  if (!confirm("Remove this card from the bundle? It will return to regular inventory.")) return;
+  await fetch(`/api/bundles/${state.selectedBundleId}/cards/${cardType}/${cardId}`, { method: "DELETE" });
+  state.bundles = await fetch("/api/bundles").then(r => r.json());
+  const b = state.bundles.find(x => x.id === state.selectedBundleId);
+  if (b) renderBundleDetail(b);
+  renderBundleList(state.bundles);
+}
+
+// --- Sell bundle ---
+
+function openSellBundleModal() {
+  if (!state.selectedBundleId) return;
+  const b = state.bundles.find(x => x.id === state.selectedBundleId);
+  if (!b || b.status === "sold") return;
+
+  document.getElementById("sellBundleTitle").textContent = `Sell Bundle: ${b.name}`;
+
+  // Show card list summary
+  const listEl = document.getElementById("sell-bundle-card-list");
+  if (b.cards.length) {
+    listEl.innerHTML = b.cards.map(c => {
+      const badge = c.label_type === "wrestling" ? "W" : "S";
+      return `<div class="d-flex justify-content-between">
+        <span><strong>[${badge}]</strong> ${esc(c.display_name)}${c.set_name ? ` — ${esc(c.set_name)}` : ""}</span>
+        <span class="text-muted">Value: ${fmt(c.current_value)}</span>
+      </div>`;
+    }).join("");
+  } else {
+    listEl.innerHTML = `<span class="text-muted">No cards in bundle.</span>`;
+  }
+
+  document.getElementById("sb-price").value    = "0";
+  document.getElementById("sb-fees").value     = "0";
+  document.getElementById("sb-platform").value = "";
+  document.getElementById("sb-date").value     = new Date().toISOString().slice(0, 10);
+  document.getElementById("sb-notes").value    = "";
+  document.getElementById("sellBundleSave").onclick = saveBundleSale;
+  sellBundleModal.show();
+}
+
+async function saveBundleSale() {
+  const price = parseFloat(document.getElementById("sb-price").value);
+  if (!price || price <= 0) { alert("Enter a sale price greater than $0."); return; }
+  const body = {
+    sold_price: price,
+    fees:       parseFloat(document.getElementById("sb-fees").value)     || 0,
+    platform:   document.getElementById("sb-platform").value.trim(),
+    sold_date:  document.getElementById("sb-date").value,
+    notes:      document.getElementById("sb-notes").value.trim(),
+  };
+  const res = await fetch(`/api/bundles/${state.selectedBundleId}/sell`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) { alert("Error recording bundle sale."); return; }
+  const data = await res.json();
+  sellBundleModal.hide();
+  state.selectedBundleId = null;
+  document.getElementById("bundle-detail").classList.add("d-none");
+  await loadBundles();
+  loadNavStats();
+  alert(`Bundle sold! ${data.sold_count} card${data.sold_count !== 1 ? "s" : ""} moved to Sold ledger.`);
+}
+
+// --- Checkbox management ---
+
+function onCardCheck(tab, id, checked) {
+  if (checked) state.selectedCards[tab].add(id);
+  else         state.selectedCards[tab].delete(id);
+  updateBundleButton(tab);
+}
+
+function updateBundleButton(tab) {
+  const count = state.selectedCards[tab].size;
+  const btn   = document.getElementById(`${tab === "wrestling" ? "w" : "s"}-bundle-btn`);
+  const span  = document.getElementById(`${tab === "wrestling" ? "w" : "s"}-bundle-count`);
+  if (btn)  btn.disabled = count === 0;
+  if (span) span.textContent = count;
+}
+
+function selectAllCards(tab, checked) {
+  const prefix = tab === "wrestling" ? "w" : "s";
+  const tbody  = document.getElementById(`${prefix}-tbody`);
+  // Set checked state on each row checkbox and fire the change event so
+  // onCardCheck() updates state.selectedCards accordingly.
+  tbody.querySelectorAll("input[type=checkbox]").forEach(cb => {
+    cb.checked = checked;
+    cb.dispatchEvent(new Event("change"));
+  });
 }
 
 

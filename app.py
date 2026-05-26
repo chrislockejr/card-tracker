@@ -36,6 +36,7 @@ class WrestlingCard(db.Model):
     quantity      = db.Column(db.Integer, default=1)
     status        = db.Column(db.String(20), default="active")  # 'active' or 'sold'
     notes         = db.Column(db.Text)
+    bundle_id     = db.Column(db.Integer, db.ForeignKey("bundles.id"), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -66,6 +67,7 @@ class SoccerCard(db.Model):
     quantity      = db.Column(db.Integer, default=1)
     status        = db.Column(db.String(20), default="active")
     notes         = db.Column(db.Text)
+    bundle_id     = db.Column(db.Integer, db.ForeignKey("bundles.id"), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -80,6 +82,18 @@ class Box(db.Model):
     box_type   = db.Column(db.String(50))                   # Blaster Box, Hobby Box, Retail Pack
     cost       = db.Column(db.Float, default=0.0)
     notes      = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Bundle(db.Model):
+    """A group of cards intended to be sold together as a bundle listing on eBay.
+    Cards are linked via bundle_id on WrestlingCard / SoccerCard; selling the bundle
+    creates a Sale record for each card with sold_price distributed proportionally."""
+    __tablename__ = "bundles"
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)
+    notes      = db.Column(db.Text)
+    status     = db.Column(db.String(20), default="active")  # 'active' or 'sold'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -178,6 +192,7 @@ class Sale(db.Model):
     platform    = db.Column(db.String(100))
     sold_date   = db.Column(db.Date, default=date.today)
     notes       = db.Column(db.Text)
+    bundle_name = db.Column(db.String(200), nullable=True)  # set when sold as part of a bundle
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -259,6 +274,7 @@ def wrestling_to_dict(c):
         "quantity": c.quantity or 1,
         "source": c.source or "Single",
         "box_id": c.box_id,
+        "bundle_id": c.bundle_id,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
@@ -281,6 +297,7 @@ def soccer_to_dict(c):
         "quantity": c.quantity or 1,
         "source": c.source or "Single",
         "box_id": c.box_id,
+        "bundle_id": c.bundle_id,
         "notes": c.notes or "",
         "created_at": c.created_at.isoformat() if c.created_at else "",
         "updated_at": c.updated_at.isoformat() if c.updated_at else "",
@@ -296,6 +313,7 @@ def sale_to_dict(s):
         "sold_price": s.sold_price, "fees": s.fees,
         "net_profit": round(s.sold_price - s.fees - s.cost, 2),
         "platform": s.platform or "", "notes": s.notes or "",
+        "bundle_name": s.bundle_name or "",
         "sold_date": s.sold_date.isoformat() if s.sold_date else "",
         "created_at": s.created_at.isoformat() if s.created_at else "",
     }
@@ -371,6 +389,39 @@ def boxproduct_to_dict(p):
         "best_retailer": best.retailer if best else None,
         "last_checked": all_prices[0].checked_date.isoformat() if all_prices else None,
         "latest_by_retailer": [boxprice_to_dict(bp) for bp in latest],
+    }
+
+
+def bundle_to_dict(b):
+    """Serialize a Bundle with its current active cards and P&L totals."""
+    w_cards = WrestlingCard.query.filter_by(bundle_id=b.id, status="active").all()
+    s_cards = SoccerCard.query.filter_by(bundle_id=b.id, status="active").all()
+    all_cards = w_cards + s_cards
+    total_cost  = round(sum(c.cost * (c.quantity or 1) for c in all_cards), 2)
+    total_value = round(sum(c.current_value * (c.quantity or 1) for c in all_cards), 2)
+    cards = []
+    for c in w_cards:
+        d = wrestling_to_dict(c)
+        d["label_type"] = "wrestling"
+        d["display_name"] = c.wrestler_name
+        d["display_detail"] = " · ".join(filter(None, [c.brand, c.card_type]))
+        cards.append(d)
+    for c in s_cards:
+        d = soccer_to_dict(c)
+        d["label_type"] = "soccer"
+        d["display_name"] = c.player_name
+        d["display_detail"] = " · ".join(filter(None, [c.team, c.league]))
+        cards.append(d)
+    return {
+        "id":          b.id,
+        "name":        b.name,
+        "notes":       b.notes or "",
+        "status":      b.status,
+        "created_at":  b.created_at.isoformat() if b.created_at else "",
+        "card_count":  len(all_cards),
+        "total_cost":  total_cost,
+        "total_value": total_value,
+        "cards":       cards,
     }
 
 
@@ -1037,6 +1088,7 @@ def create_sale():
     else:
         # Last copy — mark as sold and redistribute box costs
         card.status = "sold"
+        card.bundle_id = None  # remove from any bundle
         box_id = card.box_id
         db.session.flush()
         redistribute_box_costs(box_id)
@@ -1137,6 +1189,144 @@ def expenses_stats():
         "by_category": [{"category": r.category, "total": round(r.total, 2)} for r in rows],
         "grand_total": round(grand_total, 2),
     })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Bundles
+# ---------------------------------------------------------------------------
+
+@app.route("/api/bundles", methods=["GET"])
+def list_bundles():
+    bundles = Bundle.query.order_by(Bundle.created_at.desc()).all()
+    return jsonify([bundle_to_dict(b) for b in bundles])
+
+
+@app.route("/api/bundles", methods=["POST"])
+def create_bundle():
+    d = request.json
+    b = Bundle(name=d["name"], notes=d.get("notes", ""))
+    db.session.add(b)
+    db.session.commit()
+    return jsonify(bundle_to_dict(b)), 201
+
+
+@app.route("/api/bundles/<int:bundle_id>", methods=["PUT"])
+def update_bundle(bundle_id):
+    b = Bundle.query.get_or_404(bundle_id)
+    d = request.json
+    b.name  = d.get("name",  b.name)
+    b.notes = d.get("notes", b.notes)
+    db.session.commit()
+    return jsonify(bundle_to_dict(b))
+
+
+@app.route("/api/bundles/<int:bundle_id>", methods=["DELETE"])
+def delete_bundle(bundle_id):
+    """Disband a bundle: unlink all cards and delete the bundle record."""
+    b = Bundle.query.get_or_404(bundle_id)
+    WrestlingCard.query.filter_by(bundle_id=bundle_id).update({"bundle_id": None})
+    SoccerCard.query.filter_by(bundle_id=bundle_id).update({"bundle_id": None})
+    db.session.delete(b)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/bundles/<int:bundle_id>/cards", methods=["POST"])
+def add_cards_to_bundle(bundle_id):
+    """Assign cards to a bundle. Body: {"cards": [{"type": "wrestling", "id": 1}, ...]}
+    If a card is already in another bundle it is moved to this one."""
+    Bundle.query.get_or_404(bundle_id)
+    d = request.json
+    for item in d.get("cards", []):
+        card_type = item["type"]
+        card_id   = int(item["id"])
+        card = WrestlingCard.query.get(card_id) if card_type == "wrestling" else SoccerCard.query.get(card_id)
+        if card and card.status == "active":
+            card.bundle_id = bundle_id
+    db.session.commit()
+    return jsonify(bundle_to_dict(Bundle.query.get(bundle_id)))
+
+
+@app.route("/api/bundles/<int:bundle_id>/cards/<card_type>/<int:card_id>", methods=["DELETE"])
+def remove_card_from_bundle(bundle_id, card_type, card_id):
+    """Remove a single card from a bundle (returns it to regular inventory)."""
+    Bundle.query.get_or_404(bundle_id)
+    card = WrestlingCard.query.get_or_404(card_id) if card_type == "wrestling" else SoccerCard.query.get_or_404(card_id)
+    if card.bundle_id == bundle_id:
+        card.bundle_id = None
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/bundles/<int:bundle_id>/sell", methods=["POST"])
+def sell_bundle(bundle_id):
+    """Sell all cards in a bundle at once.
+    Sold price is distributed across cards proportionally by current_value
+    (or equally when all values are zero). Creates one Sale record per card."""
+    b = Bundle.query.get_or_404(bundle_id)
+    if b.status == "sold":
+        return jsonify({"error": "Bundle already sold"}), 400
+
+    d            = request.json
+    total_price  = float(d.get("sold_price", 0))
+    total_fees   = float(d.get("fees", 0))
+    platform     = d.get("platform", "")
+    sold_date    = date.fromisoformat(d["sold_date"]) if d.get("sold_date") else date.today()
+    notes        = d.get("notes", "")
+
+    w_cards = WrestlingCard.query.filter_by(bundle_id=bundle_id, status="active").all()
+    s_cards = SoccerCard.query.filter_by(bundle_id=bundle_id, status="active").all()
+    all_cards = [(c, "wrestling") for c in w_cards] + [(c, "soccer") for c in s_cards]
+
+    if not all_cards:
+        return jsonify({"error": "Bundle has no active cards"}), 400
+
+    # Distribute price proportionally by current_value; equal split when total = 0
+    values      = [c.current_value * (c.quantity or 1) for c, _ in all_cards]
+    total_val   = sum(values) or 1.0
+    shares      = [v / total_val for v in values]
+
+    # Round each card's share; give the last card the residual to absorb rounding drift
+    card_prices = [round(total_price * s, 2) for s in shares[:-1]]
+    card_prices.append(round(total_price - sum(card_prices), 2))
+    card_fees   = [round(total_fees  * s, 2) for s in shares[:-1]]
+    card_fees.append(round(total_fees  - sum(card_fees),   2))
+
+    for (card, card_type), cp, cf in zip(all_cards, card_prices, card_fees):
+        if card_type == "wrestling":
+            name        = card.wrestler_name
+            card_detail = " · ".join(filter(None, [card.brand, card.card_type]))
+        else:
+            name        = card.player_name
+            card_detail = " · ".join(filter(None, [card.team, card.league]))
+
+        sale = Sale(
+            card_type   = card_type,
+            card_id     = card.id,
+            name        = name,
+            set_name    = card.set_name,
+            card_detail = card_detail,
+            card_number = card.card_number,
+            source      = card.source,
+            cost        = card.cost,
+            sold_price  = cp,
+            fees        = cf,
+            platform    = platform,
+            sold_date   = sold_date,
+            notes       = notes,
+            bundle_name = b.name,
+        )
+        db.session.add(sale)
+
+        box_id         = card.box_id
+        card.status    = "sold"
+        card.bundle_id = None
+        db.session.flush()
+        redistribute_box_costs(box_id)
+
+    b.status = "sold"
+    db.session.commit()
+    return jsonify({"ok": True, "sold_count": len(all_cards)})
 
 
 # ---------------------------------------------------------------------------
@@ -1354,5 +1544,14 @@ if __name__ == "__main__":
             existing_slots = [r[1] for r in conn.execute(text("PRAGMA table_info(break_slots)"))]
             if "fees" not in existing_slots:
                 conn.execute(text("ALTER TABLE break_slots ADD COLUMN fees FLOAT DEFAULT 0.0"))
+            # Add bundle_id to card tables
+            for table in ("wrestling_cards", "soccer_cards"):
+                existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})"))]
+                if "bundle_id" not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN bundle_id INTEGER REFERENCES bundles(id)"))
+            # Add bundle_name to sales
+            existing_sales = [r[1] for r in conn.execute(text("PRAGMA table_info(sales)"))]
+            if "bundle_name" not in existing_sales:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN bundle_name VARCHAR(200)"))
             conn.commit()
     app.run(debug=True, port=5001)
