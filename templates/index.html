@@ -230,7 +230,11 @@
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span class="fw-bold" id="break-detail-title"></span>
-          <button class="btn btn-sm btn-primary" onclick="openSlotModal()"><i class="bi bi-plus-lg"></i> Add Slot</button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-success" onclick="triggerSlotImport()"><i class="bi bi-upload"></i> Import Whatnot CSV</button>
+            <button class="btn btn-sm btn-primary" onclick="openSlotModal()"><i class="bi bi-plus-lg"></i> Add Slot</button>
+          </div>
+          <input type="file" id="slot-import-file" accept=".csv" class="d-none" onchange="importWhatnotCSV(this)">
         </div>
         <div class="card-body p-0">
           <table class="table table-sm table-hover align-middle mb-0">

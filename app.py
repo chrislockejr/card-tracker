@@ -1431,6 +1431,58 @@ def delete_break_slot(slot_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/breaks/<int:break_id>/import-slots", methods=["POST"])
+def import_break_slots(break_id):
+    """Import break slots from a Whatnot CSV export.
+    Expected columns: Format, Title, Product, Description, Username, Order No., Price, Notes.
+    Fees are auto-calculated with Whatnot's standard formula:
+      8% commission on sale price + 2.9% processing on order total + $0.30 flat.
+    The CSV doesn't include an order total, so we use price as a stand-in
+    (same default the manual slot form uses when shipping/tax are unknown).
+    The Description column (cards in the slot) is stored in the slot's notes field."""
+    Break.query.get_or_404(break_id)
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "No file"}), 400
+
+    stream = io.StringIO(f.stream.read().decode("utf-8"))
+    reader = csv.DictReader(stream)
+    count  = 0
+
+    for row in reader:
+        price_str = (row.get("Price") or "0").replace("$", "").strip()
+        try:
+            price = float(price_str)
+        except ValueError:
+            continue
+        if price <= 0:
+            continue
+
+        # Whatnot fee formula — mirrors whatnotFees() in app.js
+        commission = price * 0.08
+        processing = price * 0.029 + 0.30
+        fees = round(commission + processing, 2)
+
+        # Preserve the card description and order number in notes
+        desc     = (row.get("Description") or "").strip()
+        order_no = (row.get("Order No.")   or "").strip()
+        notes_parts = [p for p in [desc, f"Order #{order_no}" if order_no else ""] if p]
+        notes = " | ".join(notes_parts)
+
+        db.session.add(BreakSlot(
+            break_id   = break_id,
+            slot_name  = (row.get("Product")  or "").strip(),
+            buyer_name = (row.get("Username") or "").strip(),
+            price      = price,
+            fees       = fees,
+            notes      = notes,
+        ))
+        count += 1
+
+    db.session.commit()
+    return jsonify({"imported": count})
+
+
 @app.route("/api/breaks/stats")
 def breaks_stats():
     """Aggregate break P&L for the portfolio summary."""

@@ -504,6 +504,34 @@ async function deleteSlot(id) {
   renderBreakList(breaks);
 }
 
+function triggerSlotImport() {
+  // Reset the file input so the same file can be re-imported if needed
+  const input = document.getElementById("slot-import-file");
+  input.value = "";
+  input.click();
+}
+
+async function importWhatnotCSV(input) {
+  const file = input.files[0];
+  if (!file || !state.selectedBreakId) return;
+
+  const form = new FormData();
+  form.append("file", file);
+
+  const res  = await fetch(`/api/breaks/${state.selectedBreakId}/import-slots`, { method: "POST", body: form });
+  const data = await res.json();
+
+  if (!res.ok) { alert("Import failed: " + (data.error || "unknown error")); return; }
+
+  // Refresh slot list and break totals
+  const breakName = document.getElementById("break-detail-title").textContent;
+  selectBreak(state.selectedBreakId, breakName);
+  const breaks = await fetch("/api/breaks").then(r => r.json());
+  renderBreakList(breaks);
+
+  alert(`Imported ${data.imported} slot${data.imported !== 1 ? "s" : ""} from Whatnot CSV.`);
+}
+
 
 // ---------------------------------------------------------------------------
 // Prices tab
