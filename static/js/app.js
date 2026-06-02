@@ -1899,7 +1899,7 @@ async function showComps(type, id, name) {
   document.getElementById("comps-tbody").innerHTML = data.items.map(item => `
     <tr>
       <td style="max-width:340px" class="text-truncate" title="${esc(item.title)}">${esc(item.title)}</td>
-      <td class="text-nowrap">${esc(item.date)}</td>
+      <td class="text-nowrap"><small class="text-muted">${esc(item.condition)}</small></td>
       <td class="text-nowrap"><strong>${fmt(item.price)}</strong></td>
       <td><a href="${esc(item.url)}" target="_blank" class="btn btn-xs btn-outline-secondary" title="View listing"><i class="bi bi-box-arrow-up-right"></i></a></td>
     </tr>`).join("");

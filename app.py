@@ -4,10 +4,12 @@ Handles all data storage and API endpoints for the trading card inventory app.
 Data is stored in a local SQLite database (instance/cards.db).
 """
 
+import base64
 import csv
 import hashlib
 import io
 import os
+import time
 import requests as http_requests
 from datetime import date, datetime
 from flask import Flask, render_template, request, jsonify, send_file, abort
@@ -28,7 +30,9 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 EBAY_APP_ID             = os.environ.get("EBAY_APP_ID", "")
+EBAY_CERT_ID            = os.environ.get("EBAY_CERT_ID", "")
 EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "")
+EBAY_ENDPOINT_URL       = os.environ.get("EBAY_ENDPOINT_URL", "")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cards.db"
@@ -1604,9 +1608,7 @@ def ebay_account_deletion():
     Works behind cloudflared: reconstructs the public URL from forwarded headers."""
     if request.method == "GET":
         challenge_code = request.args.get("challenge_code", "")
-        proto        = request.headers.get("X-Forwarded-Proto", request.scheme)
-        host         = request.headers.get("X-Forwarded-Host",  request.host)
-        endpoint_url = f"{proto}://{host}/ebay/account-deletion"
+        endpoint_url   = EBAY_ENDPOINT_URL  # explicit URL set in .env
         digest = hashlib.sha256(
             (challenge_code + EBAY_VERIFICATION_TOKEN + endpoint_url).encode()
         ).hexdigest()
@@ -1615,10 +1617,35 @@ def ebay_account_deletion():
 
 
 # ---------------------------------------------------------------------------
-# eBay comps — fetch recent sold listings for a card
+# eBay comps — fetch current listings via Browse API (OAuth App Token)
 # ---------------------------------------------------------------------------
 
-EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
+_ebay_token_cache = {"token": None, "expires_at": 0}
+
+def _get_ebay_app_token():
+    """Return a cached eBay OAuth App Token, refreshing when within 60s of expiry."""
+    now = time.time()
+    if _ebay_token_cache["token"] and _ebay_token_cache["expires_at"] > now + 60:
+        return _ebay_token_cache["token"]
+    creds = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
+    resp  = http_requests.post(
+        "https://api.ebay.com/identity/v1/oauth2/token",
+        headers={
+            "Authorization":  f"Basic {creds}",
+            "Content-Type":   "application/x-www-form-urlencoded",
+        },
+        data={
+            "grant_type": "client_credentials",
+            "scope":      "https://api.ebay.com/oauth/api_scope",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    _ebay_token_cache["token"]      = data["access_token"]
+    _ebay_token_cache["expires_at"] = now + data.get("expires_in", 7200)
+    return _ebay_token_cache["token"]
+
 
 def _ebay_keywords(card):
     """Build a tight eBay search query from card fields."""
@@ -1628,12 +1655,14 @@ def _ebay_keywords(card):
         parts = [card.player_name, card.card_type, card.set_name, "soccer card"]
     return " ".join(p for p in parts if p)
 
+
 @app.route("/api/<card_type>/<int:card_id>/comps")
 def card_comps(card_type, card_id):
-    """Return the last 10 eBay sold listings for a card as pricing comps.
-    Requires EBAY_APP_ID to be set in .env."""
-    if not EBAY_APP_ID:
-        return jsonify({"error": "EBAY_APP_ID not set — add it to .env and restart the app"}), 503
+    """Return current eBay Buy-It-Now listings for a card as pricing comps.
+    Uses the eBay Browse API (OAuth App Token). Requires EBAY_APP_ID and
+    EBAY_CERT_ID to be set in .env."""
+    if not EBAY_APP_ID or not EBAY_CERT_ID:
+        return jsonify({"error": "eBay credentials not configured in .env"}), 503
 
     if card_type == "wrestling":
         card = WrestlingCard.query.get_or_404(card_id)
@@ -1644,44 +1673,32 @@ def card_comps(card_type, card_id):
 
     keywords = _ebay_keywords(card)
     try:
-        resp = http_requests.get(
-            EBAY_FINDING_URL,
+        token = _get_ebay_app_token()
+        resp  = http_requests.get(
+            "https://api.ebay.com/buy/browse/v1/item_summary/search",
+            headers={"Authorization": f"Bearer {token}"},
             params={
-                "OPERATION-NAME":              "findCompletedItems",
-                "SERVICE-VERSION":             "1.0.0",
-                "RESPONSE-DATA-FORMAT":        "JSON",
-                "REST-PAYLOAD":                "",
-                "SECURITY-APPNAME":            EBAY_APP_ID,
-                "keywords":                    keywords,
-                "itemFilter(0).name":          "SoldItemsOnly",
-                "itemFilter(0).value":         "true",
-                "sortOrder":                   "EndTimeSoonest",
-                "paginationInput.entriesPerPage": "10",
+                "q":      keywords,
+                "limit":  10,
+                "filter": "buyingOptions:{FIXED_PRICE}",
             },
             timeout=10,
         )
         resp.raise_for_status()
-        raw = resp.json() \
-                  .get("findCompletedItemsResponse", [{}])[0] \
-                  .get("searchResult",               [{}])[0] \
-                  .get("item", [])
+        raw_items = resp.json().get("itemSummaries", [])
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
     items = []
-    for it in raw:
-        price = float(
-            it.get("sellingStatus", [{}])[0]
-              .get("currentPrice",  [{}])[0]
-              .get("__value__", 0)
-        )
+    for it in raw_items:
+        price = float(it.get("price", {}).get("value", 0))
         if price <= 0:
             continue
         items.append({
-            "title": it.get("title",       [""])[0],
-            "price": round(price, 2),
-            "date":  (it.get("listingInfo", [{}])[0].get("endTime", [""])[0] or "")[:10],
-            "url":   it.get("viewItemURL", [""])[0],
+            "title":     it.get("title", ""),
+            "price":     round(price, 2),
+            "condition": it.get("condition", ""),
+            "url":       it.get("itemWebUrl", ""),
         })
 
     suggested = round(sum(i["price"] for i in items) / len(items), 2) if items else None
