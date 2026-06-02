@@ -960,20 +960,22 @@ function renderSoccerTable(data) {
 async function loadPortfolio() {
   loadBoxes();
   loadExpenses();
-  const [stats, salesStats, expStats, breakStats] = await Promise.all([
+  const [stats, salesStats, expStats, breakStats, boxStats] = await Promise.all([
     fetch("/api/stats").then(r => r.json()),
     fetch("/api/sales/stats").then(r => r.json()),
     fetch("/api/expenses/stats").then(r => r.json()),
     fetch("/api/breaks/stats").then(r => r.json()),
+    fetch("/api/boxes/stats").then(r => r.json()),
   ]);
   const w = stats.wrestling, s = stats.soccer, t = stats.total;
   const ss = salesStats;
   const es = expStats;
   const bs = breakStats;
+  const bx = boxStats;
 
   const plClass = pn => pn >= 0 ? "gain" : "loss";
   const plStr   = pn => (pn >= 0 ? "+" : "") + fmt(pn);
-  const trueNet = ss.net_profit + bs.net - es.grand_total;
+  const trueNet = ss.net_profit + bs.net - es.grand_total - bx.total;
 
   document.getElementById("portfolio-summary").innerHTML = `
     <table class="table table-sm mb-0">
@@ -1017,6 +1019,16 @@ async function loadPortfolio() {
         <td><strong>Total Expenses</strong></td>
         <td class="loss"><strong>−${fmt(es.grand_total)}</strong></td>
       </tr>
+    </table>
+    <hr class="my-2">
+    <p class="fw-bold mb-1">Box Purchases (${bx.count} not in a break)</p>
+    <table class="table table-sm mb-0">
+      <tbody>
+        <tr class="table-dark">
+          <td><strong>Total Spent</strong></td>
+          <td class="loss"><strong>−${fmt(bx.total)}</strong></td>
+        </tr>
+      </tbody>
     </table>
     <hr class="my-2">
     <p class="fw-bold mb-1">Card Breaks (${bs.break_count} breaks)</p>

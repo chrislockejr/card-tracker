@@ -938,6 +938,20 @@ def delete_box(box_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/boxes/stats")
+def boxes_stats():
+    """Total cost of box purchases NOT linked to any break.
+    Break-linked boxes are already captured in break P&L, so we only surface
+    standalone boxes here to avoid double-counting in the portfolio summary."""
+    linked_ids = {lb.box_id for lb in BreakBox.query.all()}
+    if linked_ids:
+        non_break_boxes = Box.query.filter(~Box.id.in_(linked_ids)).all()
+    else:
+        non_break_boxes = Box.query.all()
+    total = round(sum(b.cost for b in non_break_boxes), 2)
+    return jsonify({"total": total, "count": len(non_break_boxes)})
+
+
 @app.route("/api/wrestling/check-duplicate")
 def wrestling_check_duplicate():
     """Exact-match lookup to detect duplicate cards before adding. All comparisons
