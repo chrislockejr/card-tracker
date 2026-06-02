@@ -1891,16 +1891,23 @@ async function showComps(type, id, name) {
     return;
   }
 
-  // Populate suggestion bar
-  document.getElementById("comps-count").textContent = data.items.length;
-  document.getElementById("comps-avg").textContent   = fmt(data.suggested_price);
-  document.getElementById("comps-use-btn").onclick   = () => applyCompPrice(data.suggested_price);
+  // Populate suggestion bar — label depends on whether we got sold or asking prices
+  const isSold = data.price_type === "sold";
+  const typeLabel = isSold
+    ? `<span class="badge bg-success me-1">Sold</span>`
+    : `<span class="badge bg-secondary me-1">Asking</span>`;
+  document.getElementById("comps-suggestion-text").innerHTML =
+    `${typeLabel} Suggested price (avg of <strong>${data.items.length}</strong> ${isSold ? "sold" : "current listings"}): <strong>${fmt(data.suggested_price)}</strong>`;
+  document.getElementById("comps-use-btn").onclick = () => applyCompPrice(data.suggested_price);
 
-  // Populate sold listings table
+  // Second column header: date for sold, condition for asking
+  document.getElementById("comps-col-2").textContent = isSold ? "Date" : "Condition";
+
+  // Populate table
   document.getElementById("comps-tbody").innerHTML = data.items.map(item => `
     <tr>
       <td style="max-width:340px" class="text-truncate" title="${esc(item.title)}">${esc(item.title)}</td>
-      <td class="text-nowrap"><small class="text-muted">${esc(item.condition)}</small></td>
+      <td class="text-nowrap"><small class="text-muted">${esc(isSold ? item.date : item.condition)}</small></td>
       <td class="text-nowrap"><strong>${fmt(item.price)}</strong></td>
       <td><a href="${esc(item.url)}" target="_blank" class="btn btn-xs btn-outline-secondary" title="View listing"><i class="bi bi-box-arrow-up-right"></i></a></td>
     </tr>`).join("");

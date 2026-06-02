@@ -1617,34 +1617,35 @@ def ebay_account_deletion():
 
 
 # ---------------------------------------------------------------------------
-# eBay comps — fetch current listings via Browse API (OAuth App Token)
+# eBay comps — sold prices via Marketplace Insights, fallback to Browse API
 # ---------------------------------------------------------------------------
 
-_ebay_token_cache = {"token": None, "expires_at": 0}
+# Separate token caches: one per OAuth scope since they're distinct grants
+_ebay_token_cache = {}
 
-def _get_ebay_app_token():
-    """Return a cached eBay OAuth App Token, refreshing when within 60s of expiry."""
-    now = time.time()
-    if _ebay_token_cache["token"] and _ebay_token_cache["expires_at"] > now + 60:
-        return _ebay_token_cache["token"]
+def _get_ebay_token(scope):
+    """Return a cached eBay OAuth App Token for the given scope."""
+    now   = time.time()
+    entry = _ebay_token_cache.get(scope, {})
+    if entry.get("token") and entry.get("expires_at", 0) > now + 60:
+        return entry["token"]
     creds = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
     resp  = http_requests.post(
         "https://api.ebay.com/identity/v1/oauth2/token",
         headers={
-            "Authorization":  f"Basic {creds}",
-            "Content-Type":   "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {creds}",
+            "Content-Type":  "application/x-www-form-urlencoded",
         },
-        data={
-            "grant_type": "client_credentials",
-            "scope":      "https://api.ebay.com/oauth/api_scope",
-        },
+        data={"grant_type": "client_credentials", "scope": scope},
         timeout=10,
     )
     resp.raise_for_status()
     data = resp.json()
-    _ebay_token_cache["token"]      = data["access_token"]
-    _ebay_token_cache["expires_at"] = now + data.get("expires_in", 7200)
-    return _ebay_token_cache["token"]
+    _ebay_token_cache[scope] = {
+        "token":      data["access_token"],
+        "expires_at": now + data.get("expires_in", 7200),
+    }
+    return data["access_token"]
 
 
 def _ebay_keywords(card):
@@ -1656,11 +1657,70 @@ def _ebay_keywords(card):
     return " ".join(p for p in parts if p)
 
 
+def _fetch_sold_comps(keywords):
+    """Try eBay Marketplace Insights API for actual sold prices.
+    Returns (items, 'sold') on success or (None, None) if unavailable."""
+    try:
+        token = _get_ebay_token("https://api.ebay.com/oauth/api_scope/buy.marketplace.insights")
+        resp  = http_requests.get(
+            "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"q": keywords, "limit": 10},
+            timeout=10,
+        )
+        if resp.status_code in (401, 403):
+            return None, None   # scope not available for this account
+        resp.raise_for_status()
+        raw = resp.json().get("itemSales", [])
+        items = []
+        for it in raw:
+            price = float(it.get("lastSoldPrice", {}).get("value", 0))
+            if price <= 0:
+                continue
+            date_str = (it.get("lastSoldDate") or "")[:10]
+            items.append({
+                "title":     it.get("title", ""),
+                "price":     round(price, 2),
+                "condition": it.get("condition", ""),
+                "date":      date_str,
+                "url":       it.get("itemWebUrl", ""),
+            })
+        return items, "sold"
+    except Exception:
+        return None, None
+
+
+def _fetch_listing_comps(keywords):
+    """eBay Browse API — current BIN listings. Used as fallback."""
+    token = _get_ebay_token("https://api.ebay.com/oauth/api_scope")
+    resp  = http_requests.get(
+        "https://api.ebay.com/buy/browse/v1/item_summary/search",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"q": keywords, "limit": 10, "filter": "buyingOptions:{FIXED_PRICE}"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    items = []
+    for it in resp.json().get("itemSummaries", []):
+        price = float(it.get("price", {}).get("value", 0))
+        if price <= 0:
+            continue
+        items.append({
+            "title":     it.get("title", ""),
+            "price":     round(price, 2),
+            "condition": it.get("condition", ""),
+            "date":      "",
+            "url":       it.get("itemWebUrl", ""),
+        })
+    return items, "asking"
+
+
 @app.route("/api/<card_type>/<int:card_id>/comps")
 def card_comps(card_type, card_id):
-    """Return current eBay Buy-It-Now listings for a card as pricing comps.
-    Uses the eBay Browse API (OAuth App Token). Requires EBAY_APP_ID and
-    EBAY_CERT_ID to be set in .env."""
+    """Return eBay pricing comps for a card.
+    Tries Marketplace Insights (sold prices) first; falls back to Browse API
+    (current BIN listings) if the scope isn't available. Response includes a
+    price_type field ('sold' or 'asking') so the UI can label results correctly."""
     if not EBAY_APP_ID or not EBAY_CERT_ID:
         return jsonify({"error": "eBay credentials not configured in .env"}), 503
 
@@ -1673,36 +1733,19 @@ def card_comps(card_type, card_id):
 
     keywords = _ebay_keywords(card)
     try:
-        token = _get_ebay_app_token()
-        resp  = http_requests.get(
-            "https://api.ebay.com/buy/browse/v1/item_summary/search",
-            headers={"Authorization": f"Bearer {token}"},
-            params={
-                "q":      keywords,
-                "limit":  10,
-                "filter": "buyingOptions:{FIXED_PRICE}",
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        raw_items = resp.json().get("itemSummaries", [])
+        items, price_type = _fetch_sold_comps(keywords)
+        if items is None:                           # insights not available
+            items, price_type = _fetch_listing_comps(keywords)
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
-    items = []
-    for it in raw_items:
-        price = float(it.get("price", {}).get("value", 0))
-        if price <= 0:
-            continue
-        items.append({
-            "title":     it.get("title", ""),
-            "price":     round(price, 2),
-            "condition": it.get("condition", ""),
-            "url":       it.get("itemWebUrl", ""),
-        })
-
     suggested = round(sum(i["price"] for i in items) / len(items), 2) if items else None
-    return jsonify({"keywords": keywords, "items": items, "suggested_price": suggested})
+    return jsonify({
+        "keywords":        keywords,
+        "items":           items,
+        "suggested_price": suggested,
+        "price_type":      price_type,   # 'sold' or 'asking'
+    })
 
 
 if __name__ == "__main__":
