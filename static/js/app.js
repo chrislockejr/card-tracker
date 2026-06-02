@@ -175,7 +175,7 @@ async function saveBox() {
   const method = state.editBoxId ? "PUT" : "POST";
   await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   boxModal.hide();
-  loadBoxes();
+  loadPortfolio();
 }
 
 async function deleteBox(id) {
@@ -185,7 +185,7 @@ async function deleteBox(id) {
     : `Delete "${b.name}"?`;
   if (!confirm(msg)) return;
   await fetch(`/api/boxes/${id}`, { method: "DELETE" });
-  loadBoxes();
+  loadPortfolio();
 }
 
 // ---------------------------------------------------------------------------
