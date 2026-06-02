@@ -1867,6 +1867,7 @@ async function showComps(type, id, name) {
   document.getElementById("comps-error").classList.add("d-none");
   document.querySelector("#compsModal .modal-title").textContent = `eBay Comps — ${name}`;
   document.getElementById("comps-keywords").textContent = "";
+  document.getElementById("comps-manual-price").value = "";
   compsModal.show();
 
   let data;
@@ -1905,6 +1906,13 @@ async function showComps(type, id, name) {
     </tr>`).join("");
 
   document.getElementById("comps-content").classList.remove("d-none");
+}
+
+function applyManualCompPrice(fromEmpty = false) {
+  const inputId = fromEmpty ? "comps-manual-price-empty" : "comps-manual-price";
+  const price   = parseFloat(document.getElementById(inputId).value);
+  if (!price || price <= 0) { alert("Enter a price greater than $0."); return; }
+  applyCompPrice(price);
 }
 
 async function applyCompPrice(price) {
