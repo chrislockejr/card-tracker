@@ -885,6 +885,50 @@
   </div>
 </div>
 
+<!-- eBay Comps Modal -->
+<div class="modal fade" id="compsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">eBay Sold Comps</h5>
+          <small class="text-muted" id="comps-keywords"></small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="comps-loading" class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Fetching recent sold listings…</p>
+        </div>
+        <div id="comps-content" class="d-none">
+          <div class="alert alert-primary d-flex justify-content-between align-items-center mb-3" id="comps-suggestion">
+            <span>Suggested price (avg of last <strong id="comps-count"></strong> sold): <strong id="comps-avg"></strong></span>
+            <button class="btn btn-sm btn-primary" id="comps-use-btn">Use this price</button>
+          </div>
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Title</th>
+                <th>Date</th>
+                <th>Price</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="comps-tbody"></tbody>
+          </table>
+        </div>
+        <div id="comps-empty" class="d-none text-center text-muted py-4">
+          <i class="bi bi-search fs-2"></i>
+          <p class="mt-2">No recent sold listings found for this search.</p>
+          <small id="comps-empty-keywords"></small>
+        </div>
+        <div id="comps-error" class="d-none alert alert-danger"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Import Modal -->
 <div class="modal fade" id="importModal" tabindex="-1">
   <div class="modal-dialog">

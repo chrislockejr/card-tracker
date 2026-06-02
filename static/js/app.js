@@ -44,7 +44,7 @@ const state = {
 
 // Bootstrap modal instances — initialized after DOM is ready
 let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal, breakModal, slotModal,
-    createBundleModal, bundleAssignModal, sellBundleModal;
+    createBundleModal, bundleAssignModal, sellBundleModal, compsModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
@@ -60,6 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   createBundleModal = new bootstrap.Modal(document.getElementById("createBundleModal"));
   bundleAssignModal = new bootstrap.Modal(document.getElementById("bundleAssignModal"));
   sellBundleModal   = new bootstrap.Modal(document.getElementById("sellBundleModal"));
+  compsModal        = new bootstrap.Modal(document.getElementById("compsModal"));
 
   // Toggle new/existing fields in the bundle assign modal
   document.querySelectorAll("input[name='bundleMode']").forEach(el => {
@@ -883,6 +884,7 @@ function renderWrestlingTable(data) {
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('wrestling',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('wrestling',${c.id},'${esc(c.wrestler_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
         <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
+        <button class="btn btn-xs btn-outline-secondary me-1" onclick="showComps('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="eBay Comps"><i class="bi bi-tags"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
         <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('wrestling',${c.id})"                           title="Delete"><i class="bi bi-trash"></i></button>
@@ -941,6 +943,7 @@ function renderSoccerTable(data) {
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('soccer',${c.id},'${esc(c.player_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
         <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')"   title="Value History"><i class="bi bi-graph-up"></i></button>
+        <button class="btn btn-xs btn-outline-secondary me-1" onclick="showComps('soccer',${c.id},'${esc(c.player_name)}')"   title="eBay Comps"><i class="bi bi-tags"></i></button>
         <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
         <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
         <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('soccer',${c.id})"                            title="Delete"><i class="bi bi-trash"></i></button>
@@ -1843,6 +1846,89 @@ function selectAllCards(tab, checked) {
     cb.checked = checked;
     cb.dispatchEvent(new Event("change"));
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// eBay comps
+// ---------------------------------------------------------------------------
+
+// Track which card the comps modal is open for so "Use this price" knows what to update
+const compsState = { type: null, id: null };
+
+async function showComps(type, id, name) {
+  compsState.type = type;
+  compsState.id   = id;
+
+  // Reset modal to loading state
+  document.getElementById("comps-loading").classList.remove("d-none");
+  document.getElementById("comps-content").classList.add("d-none");
+  document.getElementById("comps-empty").classList.add("d-none");
+  document.getElementById("comps-error").classList.add("d-none");
+  document.querySelector("#compsModal .modal-title").textContent = `eBay Comps — ${name}`;
+  document.getElementById("comps-keywords").textContent = "";
+  compsModal.show();
+
+  let data;
+  try {
+    const res = await fetch(`/api/${type}/${id}/comps`);
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+  } catch (err) {
+    document.getElementById("comps-loading").classList.add("d-none");
+    document.getElementById("comps-error").classList.remove("d-none");
+    document.getElementById("comps-error").textContent = "Error fetching comps: " + err.message;
+    return;
+  }
+
+  document.getElementById("comps-loading").classList.add("d-none");
+  document.getElementById("comps-keywords").textContent = `Search: "${data.keywords}"`;
+
+  if (!data.items || !data.items.length) {
+    document.getElementById("comps-empty").classList.remove("d-none");
+    document.getElementById("comps-empty-keywords").textContent = `Search used: "${data.keywords}"`;
+    return;
+  }
+
+  // Populate suggestion bar
+  document.getElementById("comps-count").textContent = data.items.length;
+  document.getElementById("comps-avg").textContent   = fmt(data.suggested_price);
+  document.getElementById("comps-use-btn").onclick   = () => applyCompPrice(data.suggested_price);
+
+  // Populate sold listings table
+  document.getElementById("comps-tbody").innerHTML = data.items.map(item => `
+    <tr>
+      <td style="max-width:340px" class="text-truncate" title="${esc(item.title)}">${esc(item.title)}</td>
+      <td class="text-nowrap">${esc(item.date)}</td>
+      <td class="text-nowrap"><strong>${fmt(item.price)}</strong></td>
+      <td><a href="${esc(item.url)}" target="_blank" class="btn btn-xs btn-outline-secondary" title="View listing"><i class="bi bi-box-arrow-up-right"></i></a></td>
+    </tr>`).join("");
+
+  document.getElementById("comps-content").classList.remove("d-none");
+}
+
+async function applyCompPrice(price) {
+  const { type, id } = compsState;
+  if (!type || !id) return;
+
+  // Fetch the card's current data so we can do a minimal update
+  const listRes = await fetch(`/api/${type}?page=1&per_page=10000`);
+  const list    = await listRes.json();
+  const card    = list.cards.find(c => c.id === id);
+  if (!card) { alert("Card not found."); return; }
+
+  await fetch(`/api/${type}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...card, current_value: price }),
+  });
+
+  compsModal.hide();
+
+  // Refresh the table so the new value shows immediately
+  if (type === "wrestling") loadWrestling();
+  else loadSoccer();
+  loadNavStats();
 }
 
 

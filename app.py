@@ -5,11 +5,30 @@ Data is stored in a local SQLite database (instance/cards.db).
 """
 
 import csv
+import hashlib
 import io
+import os
+import requests as http_requests
 from datetime import date, datetime
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
+
+# ---------------------------------------------------------------------------
+# Config — load .env file if present (no external dependency required)
+# ---------------------------------------------------------------------------
+
+_env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
+EBAY_APP_ID             = os.environ.get("EBAY_APP_ID", "")
+EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cards.db"
@@ -1571,6 +1590,102 @@ def delete_box_price(price_id):
     db.session.delete(p)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# eBay account deletion notification (compliance requirement)
+# ---------------------------------------------------------------------------
+
+@app.route("/ebay/account-deletion", methods=["GET", "POST"])
+def ebay_account_deletion():
+    """eBay Marketplace Account Deletion/Closure Notification endpoint.
+    GET  — challenge/response handshake eBay uses to verify the endpoint.
+    POST — actual deletion notification (no-op: this app stores no eBay user data).
+    Works behind cloudflared: reconstructs the public URL from forwarded headers."""
+    if request.method == "GET":
+        challenge_code = request.args.get("challenge_code", "")
+        proto        = request.headers.get("X-Forwarded-Proto", request.scheme)
+        host         = request.headers.get("X-Forwarded-Host",  request.host)
+        endpoint_url = f"{proto}://{host}/ebay/account-deletion"
+        digest = hashlib.sha256(
+            (challenge_code + EBAY_VERIFICATION_TOKEN + endpoint_url).encode()
+        ).hexdigest()
+        return jsonify({"challengeResponse": digest})
+    return jsonify({"ok": True})  # POST — acknowledge, nothing to do
+
+
+# ---------------------------------------------------------------------------
+# eBay comps — fetch recent sold listings for a card
+# ---------------------------------------------------------------------------
+
+EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
+
+def _ebay_keywords(card):
+    """Build a tight eBay search query from card fields."""
+    if isinstance(card, WrestlingCard):
+        parts = [card.wrestler_name, card.card_type, card.set_name, "card"]
+    else:
+        parts = [card.player_name, card.card_type, card.set_name, "soccer card"]
+    return " ".join(p for p in parts if p)
+
+@app.route("/api/<card_type>/<int:card_id>/comps")
+def card_comps(card_type, card_id):
+    """Return the last 10 eBay sold listings for a card as pricing comps.
+    Requires EBAY_APP_ID to be set in .env."""
+    if not EBAY_APP_ID:
+        return jsonify({"error": "EBAY_APP_ID not set — add it to .env and restart the app"}), 503
+
+    if card_type == "wrestling":
+        card = WrestlingCard.query.get_or_404(card_id)
+    elif card_type == "soccer":
+        card = SoccerCard.query.get_or_404(card_id)
+    else:
+        abort(404)
+
+    keywords = _ebay_keywords(card)
+    try:
+        resp = http_requests.get(
+            EBAY_FINDING_URL,
+            params={
+                "OPERATION-NAME":              "findCompletedItems",
+                "SERVICE-VERSION":             "1.0.0",
+                "RESPONSE-DATA-FORMAT":        "JSON",
+                "REST-PAYLOAD":                "",
+                "SECURITY-APPNAME":            EBAY_APP_ID,
+                "keywords":                    keywords,
+                "itemFilter(0).name":          "SoldItemsOnly",
+                "itemFilter(0).value":         "true",
+                "sortOrder":                   "EndTimeSoonest",
+                "paginationInput.entriesPerPage": "10",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json() \
+                  .get("findCompletedItemsResponse", [{}])[0] \
+                  .get("searchResult",               [{}])[0] \
+                  .get("item", [])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    items = []
+    for it in raw:
+        price = float(
+            it.get("sellingStatus", [{}])[0]
+              .get("currentPrice",  [{}])[0]
+              .get("__value__", 0)
+        )
+        if price <= 0:
+            continue
+        items.append({
+            "title": it.get("title",       [""])[0],
+            "price": round(price, 2),
+            "date":  (it.get("listingInfo", [{}])[0].get("endTime", [""])[0] or "")[:10],
+            "url":   it.get("viewItemURL", [""])[0],
+        })
+
+    suggested = round(sum(i["price"] for i in items) / len(items), 2) if items else None
+    return jsonify({"keywords": keywords, "items": items, "suggested_price": suggested})
 
 
 if __name__ == "__main__":
