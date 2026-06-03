@@ -14,7 +14,7 @@ import requests as http_requests
 from datetime import date, datetime
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy import cast, Integer, text
 
 # ---------------------------------------------------------------------------
 # Config — load .env file if present (no external dependency required)
@@ -515,7 +515,7 @@ def list_wrestling():
         "set_name":      WrestlingCard.set_name,
         "brand":         WrestlingCard.brand,
         "card_type":     WrestlingCard.card_type,
-        "card_number":   WrestlingCard.card_number,
+        "card_number":   cast(WrestlingCard.card_number, Integer),
         "cost":          WrestlingCard.cost,
         "current_value": WrestlingCard.current_value,
     }
@@ -651,6 +651,7 @@ def list_soccer():
         "team":          SoccerCard.team,
         "league":        SoccerCard.league,
         "card_type":     SoccerCard.card_type,
+        "card_number":   cast(SoccerCard.card_number, Integer),
         "year":          SoccerCard.year,
         "cost":          SoccerCard.cost,
         "current_value": SoccerCard.current_value,
