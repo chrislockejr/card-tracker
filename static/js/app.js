@@ -1233,7 +1233,10 @@ function wrestlingForm(c, opts = {}) {
       </div>
       <div class="col-md-6">
         <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
-        <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+        <div class="input-group">
+          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+          <button class="btn btn-outline-secondary" type="button" onclick="showCompsFromForm('wrestling')" title="Look up eBay prices"><i class="bi bi-tags"></i></button>
+        </div>
       </div>
       <div class="col-12">
         <label class="form-label">Notes</label>
@@ -1311,7 +1314,10 @@ function soccerForm(c, opts = {}) {
       </div>
       <div class="col-md-6">
         <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
-        <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+        <div class="input-group">
+          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+          <button class="btn btn-outline-secondary" type="button" onclick="showCompsFromForm('soccer')" title="Look up eBay prices"><i class="bi bi-tags"></i></button>
+        </div>
       </div>
       <div class="col-12">
         <label class="form-label">Notes</label>
@@ -1866,12 +1872,31 @@ function selectAllCards(tab, checked) {
 // ---------------------------------------------------------------------------
 
 // Track which card the comps modal is open for so "Use this price" knows what to update
-const compsState = { type: null, id: null };
+// formMode: true = fill the add/edit form's value field instead of saving to DB
+const compsState = { type: null, id: null, formMode: false };
+
+async function showCompsFromForm(type) {
+  const name     = document.getElementById(type === "wrestling" ? "f-wrestler_name" : "f-player_name")?.value.trim();
+  const cardType = document.getElementById("f-card_type")?.value.trim();
+  const setName  = document.getElementById("f-set_name")?.value.trim();
+  if (!name) { alert("Enter a name first."); return; }
+  const suffix   = type === "soccer" ? "soccer card" : "card";
+  const keywords = [name, cardType, setName, suffix].filter(Boolean).join(" ");
+  compsState.type     = type;
+  compsState.id       = null;
+  compsState.formMode = true;
+  await _showCompsModal(name, `/api/comps?q=${encodeURIComponent(keywords)}`);
+}
 
 async function showComps(type, id, name) {
-  compsState.type = type;
-  compsState.id   = id;
+  compsState.type     = type;
+  compsState.id       = id;
+  compsState.formMode = false;
 
+  await _showCompsModal(name, `/api/${type}/${id}/comps`);
+}
+
+async function _showCompsModal(name, url) {
   // Reset modal to loading state
   document.getElementById("comps-loading").classList.remove("d-none");
   document.getElementById("comps-content").classList.add("d-none");
@@ -1884,7 +1909,7 @@ async function showComps(type, id, name) {
 
   let data;
   try {
-    const res = await fetch(`/api/${type}/${id}/comps`);
+    const res = await fetch(url);
     data = await res.json();
     if (!res.ok) throw new Error(data.error || "Request failed");
   } catch (err) {
@@ -1935,7 +1960,16 @@ function applyManualCompPrice(fromEmpty = false) {
 }
 
 async function applyCompPrice(price) {
-  const { type, id } = compsState;
+  const { type, id, formMode } = compsState;
+
+  if (formMode) {
+    // Fill the add/edit form's value field — don't save yet
+    const input = document.getElementById("f-current_value");
+    if (input) input.value = price.toFixed(2);
+    compsModal.hide();
+    return;
+  }
+
   if (!type || !id) return;
 
   // Fetch the card's current data so we can do a minimal update

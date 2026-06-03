@@ -1729,6 +1729,25 @@ def _fetch_listing_comps(keywords):
     return items, "asking"
 
 
+@app.route("/api/comps")
+def keyword_comps():
+    """Fetch eBay comps by raw keyword string — used from the add/edit card form
+    before the card has been saved (no card ID exists yet)."""
+    keywords = request.args.get("q", "").strip()
+    if not keywords:
+        return jsonify({"error": "No keywords provided"}), 400
+    if not EBAY_APP_ID or not EBAY_CERT_ID:
+        return jsonify({"error": "eBay credentials not configured in .env"}), 503
+    try:
+        items, price_type = _fetch_sold_comps(keywords)
+        if items is None:
+            items, price_type = _fetch_listing_comps(keywords)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+    suggested = round(sum(i["price"] for i in items) / len(items), 2) if items else None
+    return jsonify({"keywords": keywords, "items": items, "suggested_price": suggested, "price_type": price_type})
+
+
 @app.route("/api/<card_type>/<int:card_id>/comps")
 def card_comps(card_type, card_id):
     """Return eBay pricing comps for a card.
