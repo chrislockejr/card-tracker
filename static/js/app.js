@@ -133,8 +133,9 @@ function renderBoxes() {
     const pl        = b.total_value - b.cost;
     const plClass   = pl >= 0 ? "gain" : "loss";
     const costPerCard = b.card_count > 0 ? (b.cost / b.card_count).toFixed(2) : "—";
-    return `<tr>
-      <td><strong>${esc(b.name)}</strong></td>
+    const closedBadge = b.status === "closed" ? ` <span class="badge bg-secondary">Closed</span>` : "";
+    return `<tr class="${b.status === "closed" ? "text-muted" : ""}">
+      <td><strong>${esc(b.name)}</strong>${closedBadge}</td>
       <td><span class="badge bg-secondary">${esc(b.box_type)}</span></td>
       <td>${fmt(b.cost)}</td>
       <td>${b.card_count}</td>
@@ -158,6 +159,9 @@ function openBoxModal(id) {
   document.getElementById("b-box_type").value = b ? b.box_type : "Blaster Box";
   document.getElementById("b-cost").value     = b ? b.cost     : 0;
   document.getElementById("b-notes").value    = b ? b.notes    : "";
+  document.getElementById("b-closed").checked = b ? b.status === "closed" : false;
+  // Only show the closed toggle when editing an existing box
+  document.getElementById("b-status-row").classList.toggle("d-none", !id);
   document.getElementById("boxSave").onclick  = saveBox;
   boxModal.show();
 }
@@ -169,6 +173,7 @@ async function saveBox() {
     name,
     box_type: document.getElementById("b-box_type").value,
     cost:     document.getElementById("b-cost").value,
+    status:   document.getElementById("b-closed").checked ? "closed" : "open",
     notes:    document.getElementById("b-notes").value.trim(),
   };
   const url    = state.editBoxId ? `/api/boxes/${state.editBoxId}` : "/api/boxes";
@@ -761,8 +766,9 @@ async function deletePrice(id) {
 async function populateBoxPicker(selectedBoxId) {
   if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
   const sel = document.getElementById("f-box_id");
+  const openBoxes = state.boxes.filter(b => b.status !== "closed" || b.id === selectedBoxId);
   sel.innerHTML = `<option value="">— select box —</option>` +
-    state.boxes.map(b =>
+    openBoxes.map(b =>
       `<option value="${b.id}" data-cost="${b.cost}" data-count="${b.card_count}" ${b.id === selectedBoxId ? "selected" : ""}>${esc(b.name)} (${fmt(b.cost)})</option>`
     ).join("");
   updateCostSuggestion();

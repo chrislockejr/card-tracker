@@ -104,6 +104,7 @@ class Box(db.Model):
     name       = db.Column(db.String(200), nullable=False)  # e.g. "Topps Chrome WWE 2026 Blaster"
     box_type   = db.Column(db.String(50))                   # Blaster Box, Hobby Box, Retail Pack
     cost       = db.Column(db.Float, default=0.0)
+    status     = db.Column(db.String(20), default="open")   # 'open' or 'closed'
     notes      = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -468,7 +469,7 @@ def box_to_dict(b):
     # When adding the next card the caller should use card_count + 1 as the divisor.
     return {
         "id": b.id, "name": b.name, "box_type": b.box_type or "",
-        "cost": b.cost, "notes": b.notes or "",
+        "cost": b.cost, "status": b.status or "open", "notes": b.notes or "",
         "created_at": b.created_at.isoformat() if b.created_at else "",
         "card_count": card_count,
         "total_value": round(total_value, 2),
@@ -921,6 +922,7 @@ def update_box(box_id):
     b.name     = d.get("name", b.name)
     b.box_type = d.get("box_type", b.box_type)
     b.cost     = float(d.get("cost", b.cost))
+    b.status   = d.get("status", b.status)
     b.notes    = d.get("notes", b.notes)
     # Re-split the updated cost across all linked cards
     redistribute_box_costs(b.id)
@@ -1805,6 +1807,10 @@ if __name__ == "__main__":
             existing_slots = [r[1] for r in conn.execute(text("PRAGMA table_info(break_slots)"))]
             if "fees" not in existing_slots:
                 conn.execute(text("ALTER TABLE break_slots ADD COLUMN fees FLOAT DEFAULT 0.0"))
+            # Add status column to boxes
+            existing_boxes = [r[1] for r in conn.execute(text("PRAGMA table_info(boxes)"))]
+            if "status" not in existing_boxes:
+                conn.execute(text("ALTER TABLE boxes ADD COLUMN status VARCHAR(20) DEFAULT 'open'"))
             # Add bundle_id to card tables
             for table in ("wrestling_cards", "soccer_cards"):
                 existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})"))]
