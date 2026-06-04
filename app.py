@@ -9,6 +9,7 @@ import csv
 import hashlib
 import io
 import os
+import sqlite3
 import time
 import requests as http_requests
 from datetime import date, datetime
@@ -1782,6 +1783,77 @@ def card_comps(card_type, card_id):
         "suggested_price": suggested,
         "price_type":      price_type,   # 'sold' or 'asking'
     })
+
+
+# ---------------------------------------------------------------------------
+# Routes — Admin / Backups
+# ---------------------------------------------------------------------------
+
+def _backup_dir():
+    return os.path.join(os.path.dirname(__file__), "backups")
+
+def _db_path():
+    return os.path.join(os.path.dirname(__file__), "instance", "cards.db")
+
+
+@app.route("/api/backups", methods=["GET"])
+def list_backups():
+    """Return all backup files sorted newest first."""
+    bd = _backup_dir()
+    os.makedirs(bd, exist_ok=True)
+    files = []
+    for name in sorted(os.listdir(bd), reverse=True):
+        if not name.endswith(".db"):
+            continue
+        path = os.path.join(bd, name)
+        files.append({
+            "filename":   name,
+            "size":       os.path.getsize(path),
+            "created_at": datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return jsonify(files)
+
+
+@app.route("/api/backups", methods=["POST"])
+def create_backup():
+    """Create a backup using SQLite's built-in backup API (safe while live)."""
+    bd = _backup_dir()
+    os.makedirs(bd, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename  = f"cards_backup_{timestamp}.db"
+    dst_path  = os.path.join(bd, filename)
+    src = sqlite3.connect(_db_path())
+    dst = sqlite3.connect(dst_path)
+    src.backup(dst)
+    dst.close()
+    src.close()
+    return jsonify({
+        "filename":   filename,
+        "size":       os.path.getsize(dst_path),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }), 201
+
+
+@app.route("/api/backups/<filename>", methods=["GET"])
+def download_backup(filename):
+    """Download a backup file. Rejects path traversal attempts."""
+    if ".." in filename or "/" in filename or not filename.endswith(".db"):
+        abort(400)
+    path = os.path.join(_backup_dir(), filename)
+    if not os.path.exists(path):
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=filename)
+
+
+@app.route("/api/backups/<filename>", methods=["DELETE"])
+def delete_backup(filename):
+    """Delete a backup file."""
+    if ".." in filename or "/" in filename or not filename.endswith(".db"):
+        abort(400)
+    path = os.path.join(_backup_dir(), filename)
+    if os.path.exists(path):
+        os.remove(path)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

@@ -100,7 +100,7 @@ function switchTab(tab) {
   });
 
   // Show only the selected tab panel
-  ["wrestling", "soccer", "sold", "bundles", "breaks", "prices", "portfolio"].forEach(t => {
+  ["wrestling", "soccer", "sold", "bundles", "breaks", "prices", "portfolio", "admin"].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle("d-none", t !== tab);
   });
 
@@ -111,6 +111,7 @@ function switchTab(tab) {
   else if (tab === "breaks") loadBreaks();
   else if (tab === "prices") loadPrices();
   else if (tab === "portfolio") loadPortfolio();
+  else if (tab === "admin") loadAdmin();
 }
 
 
@@ -2115,6 +2116,61 @@ async function loadNavStats() {
   document.getElementById("nav-stats").innerHTML = `
     <span class="nav-stats-item"><strong>${t.count}</strong> cards</span>
     <span class="nav-stats-item">Value: <strong>${fmt(t.value)}</strong></span>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Admin tab — backups
+// ---------------------------------------------------------------------------
+
+async function loadAdmin() {
+  const backups = await fetch("/api/backups").then(r => r.json());
+  renderBackups(backups);
+}
+
+function renderBackups(backups) {
+  const tbody = document.getElementById("backups-tbody");
+  if (!backups.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No backups yet. Click "Create Backup" to make one.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = backups.map(b => `<tr>
+    <td>${esc(b.created_at)}</td>
+    <td class="text-muted">${fmtBytes(b.size)}</td>
+    <td class="action-btns">
+      <a  class="btn btn-xs btn-outline-primary me-1" href="/api/backups/${esc(b.filename)}" download title="Download"><i class="bi bi-download"></i></a>
+      <button class="btn btn-xs btn-outline-danger" onclick="deleteBackup('${esc(b.filename)}')" title="Delete"><i class="bi bi-trash"></i></button>
+    </td>
+  </tr>`).join("");
+}
+
+async function createBackup() {
+  const btn = document.getElementById("backup-btn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Backing up…`;
+  try {
+    const res  = await fetch("/api/backups", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Backup failed");
+    await loadAdmin();
+  } catch (err) {
+    alert("Backup failed: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-plus-lg"></i> Create Backup`;
+  }
+}
+
+async function deleteBackup(filename) {
+  if (!confirm(`Delete backup "${filename}"? This cannot be undone.`)) return;
+  await fetch(`/api/backups/${encodeURIComponent(filename)}`, { method: "DELETE" });
+  loadAdmin();
+}
+
+function fmtBytes(bytes) {
+  if (bytes < 1024)        return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 

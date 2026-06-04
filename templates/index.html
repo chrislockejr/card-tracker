@@ -27,6 +27,7 @@
     <li class="nav-item"><a class="nav-link" href="#" data-tab="breaks">Breaks</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="prices">Prices</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="portfolio">Portfolio</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="admin"><i class="bi bi-gear"></i> Admin</a></li>
   </ul>
 
   <!-- Wrestling Tab -->
@@ -385,6 +386,35 @@
               <tbody id="expenses-tbody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Tab -->
+  <div id="tab-admin" class="d-none">
+    <div class="row g-3">
+      <div class="col-md-8 col-lg-6">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold"><i class="bi bi-database"></i> Database Backups</span>
+            <button class="btn btn-sm btn-primary" onclick="createBackup()" id="backup-btn">
+              <i class="bi bi-plus-lg"></i> Create Backup
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th>Date / Time</th>
+                  <th>Size</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="backups-tbody"></tbody>
+            </table>
+          </div>
+          <div class="card-footer text-muted small" id="backup-location"></div>
         </div>
       </div>
     </div>
