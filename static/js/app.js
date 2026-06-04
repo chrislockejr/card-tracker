@@ -1241,7 +1241,7 @@ function wrestlingForm(c, opts = {}) {
       <div class="col-md-6">
         <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
         <div class="input-group">
-          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${"current_value" in c ? c.current_value : 1}">
           <button class="btn btn-outline-secondary" type="button" onclick="showCompsFromForm('wrestling')" title="Look up eBay prices"><i class="bi bi-tags"></i></button>
         </div>
       </div>
@@ -1322,7 +1322,7 @@ function soccerForm(c, opts = {}) {
       <div class="col-md-6">
         <label class="form-label">Current Value ($) <small class="text-muted">per card</small></label>
         <div class="input-group">
-          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${c.current_value||0}">
+          <input class="form-control" type="number" step="0.01" id="f-current_value" value="${"current_value" in c ? c.current_value : 1}">
           <button class="btn btn-outline-secondary" type="button" onclick="showCompsFromForm('soccer')" title="Look up eBay prices"><i class="bi bi-tags"></i></button>
         </div>
       </div>
