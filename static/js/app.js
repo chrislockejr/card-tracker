@@ -2086,6 +2086,7 @@ async function _refreshBatchDataLists(sport) {
     fill("bt-set-list",    opts.set_name,  ["Donruss Road to World Cup 25-26","Topps Chrome UEFA 2025","Panini Prizm FIFA 2026"]);
     fill("bt-league-list", opts.league,    ["International","Premier League","La Liga","MLS","Champions League"]);
     fill("bt-type-list",   opts.card_type, ["Base","Refractor","Auto","Prizm","Patch","Rookie Auto"]);
+    fill("bt-team-list",   opts.team,      ["USA","Brazil","Argentina","England","France","Germany","Spain","Portugal","Netherlands","Italy"]);
   }
 }
 
@@ -2117,7 +2118,7 @@ function addBatchRow() {
   tr.innerHTML = `
     <td class="text-center text-muted small">${rowNum}</td>
     <td><input type="text" class="form-control form-control-sm bt-name" placeholder="Name" autocomplete="off"></td>
-    <td class="bt-team-cell${isSoccer ? "" : " d-none"}"><input type="text" class="form-control form-control-sm bt-team" placeholder="Team" autocomplete="off"></td>
+    <td class="bt-team-cell${isSoccer ? "" : " d-none"}"><input type="text" class="form-control form-control-sm bt-team" placeholder="Team" list="bt-team-list" autocomplete="off"></td>
     <td><input type="text" class="form-control form-control-sm bt-cardnum" placeholder="e.g. 42"></td>
     <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bt-value" value="1.00"></td>
     <td><button class="btn btn-xs btn-outline-danger" onclick="removeBatchRow(${id})" tabindex="-1"><i class="bi bi-x"></i></button></td>`;
