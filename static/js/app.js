@@ -2225,7 +2225,7 @@ async function saveBatch() {
   if (saved)  parts.push(`${saved} new`);
   if (merged) parts.push(`${merged} merged with existing`);
   if (failed) parts.push(`${failed} failed`);
-  status.textContent = `Done — ${parts.join(", ")}.`;`;
+  status.textContent = `Done — ${parts.join(", ")}.`;
   btn.disabled = false;
 
   // Refresh inventory + nav stats
