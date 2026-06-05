@@ -2179,30 +2179,53 @@ async function saveBatch() {
   const status = document.getElementById("bt-status");
   btn.disabled = true;
 
-  let saved = 0, failed = 0;
+  let saved = 0, merged = 0, failed = 0;
   for (const [i, row] of rows.entries()) {
-    status.textContent = `Saving ${i + 1} of ${rows.length}…`;
-    const body = sport === "wrestling" ? {
-      wrestler_name: row.name, set_name: setName, brand,
-      card_type: cardType, card_number: row.num,
-      cost: 0, current_value: row.value,
-      quantity: 1, source, box_id: boxId || null, notes: "",
-    } : {
-      player_name: row.name, set_name: setName, team: row.team, league,
-      card_type: cardType, card_number: row.num,
-      cost: 0, current_value: row.value,
-      quantity: 1, source, box_id: boxId || null, notes: "",
-    };
+    status.textContent = `Checking ${i + 1} of ${rows.length}…`;
     try {
-      const res = await fetch(`/api/${sport}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      // Check for a duplicate before saving
+      const nameKey   = sport === "wrestling" ? "wrestler_name" : "player_name";
+      const dupParams = new URLSearchParams({
+        [nameKey]: row.name, set_name: setName,
+        card_type: cardType, card_number: row.num,
       });
-      if (res.ok) saved++; else failed++;
+      const matches = await fetch(`/api/${sport}/check-duplicate?${dupParams}`).then(r => r.json());
+
+      if (matches.length > 0) {
+        // Auto-merge: bump the existing card's quantity
+        const existing = matches[0];
+        const res = await fetch(`/api/${sport}/${existing.id}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...existing, quantity: (existing.quantity || 1) + 1 }),
+        });
+        if (res.ok) merged++; else failed++;
+      } else {
+        // New card
+        const body = sport === "wrestling" ? {
+          wrestler_name: row.name, set_name: setName, brand,
+          card_type: cardType, card_number: row.num,
+          cost: 0, current_value: row.value,
+          quantity: 1, source, box_id: boxId || null, notes: "",
+        } : {
+          player_name: row.name, set_name: setName, team: row.team, league,
+          card_type: cardType, card_number: row.num,
+          cost: 0, current_value: row.value,
+          quantity: 1, source, box_id: boxId || null, notes: "",
+        };
+        const res = await fetch(`/api/${sport}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) saved++; else failed++;
+      }
     } catch { failed++; }
   }
 
-  status.textContent = `Done — ${saved} saved${failed ? `, ${failed} failed` : ""}.`;
+  const parts = [];
+  if (saved)  parts.push(`${saved} new`);
+  if (merged) parts.push(`${merged} merged with existing`);
+  if (failed) parts.push(`${failed} failed`);
+  status.textContent = `Done — ${parts.join(", ")}.`;`;
   btn.disabled = false;
 
   // Refresh inventory + nav stats
