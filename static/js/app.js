@@ -44,7 +44,7 @@ const state = {
 
 // Bootstrap modal instances — initialized after DOM is ready
 let cardModal, historyModal, importModal, boxModal, sellModal, expenseModal, productModal, priceModal, breakModal, slotModal,
-    createBundleModal, bundleAssignModal, sellBundleModal, compsModal;
+    createBundleModal, bundleAssignModal, sellBundleModal, compsModal, batchModal;
 
 document.addEventListener("DOMContentLoaded", () => {
   cardModal    = new bootstrap.Modal(document.getElementById("cardModal"));
@@ -61,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bundleAssignModal = new bootstrap.Modal(document.getElementById("bundleAssignModal"));
   sellBundleModal   = new bootstrap.Modal(document.getElementById("sellBundleModal"));
   compsModal        = new bootstrap.Modal(document.getElementById("compsModal"));
+  batchModal        = new bootstrap.Modal(document.getElementById("batchModal"));
 
   // Toggle new/existing fields in the bundle assign modal
   document.querySelectorAll("input[name='bundleMode']").forEach(el => {
@@ -2032,6 +2033,179 @@ async function applyCompPrice(price) {
   if (type === "wrestling") loadWrestling();
   else loadSoccer();
   loadNavStats();
+}
+
+
+// ---------------------------------------------------------------------------
+// Batch add
+// ---------------------------------------------------------------------------
+
+let batchRowId = 0;  // incrementing key for each row
+
+async function openBatchModal(sport) {
+  batchRowId = 0;
+  document.getElementById("bt-tbody").innerHTML = "";
+  document.getElementById("bt-status").textContent = "";
+  document.getElementById("bt-save").disabled = false;
+
+  // Pre-select sport based on current tab (or passed arg)
+  const s = sport || (["wrestling","soccer"].includes(state.currentTab) ? state.currentTab : "wrestling");
+  document.getElementById("bt-sport").value = s;
+
+  // Populate datalists from existing cards
+  await _refreshBatchDataLists(s);
+  onBatchSportChange();
+
+  // Populate box picker
+  if (!state.boxes.length) state.boxes = await fetch("/api/boxes").then(r => r.json());
+  const openBoxes = state.boxes.filter(b => b.status !== "closed");
+  document.getElementById("bt-box").innerHTML =
+    `<option value="">— select box —</option>` +
+    openBoxes.map(b => `<option value="${b.id}">${esc(b.name)} (${fmt(b.cost)})</option>`).join("");
+
+  // Start with 5 empty rows
+  for (let i = 0; i < 5; i++) addBatchRow();
+  batchModal.show();
+
+  // Focus first name input
+  setTimeout(() => document.querySelector("#bt-tbody input.bt-name")?.focus(), 300);
+}
+
+async function _refreshBatchDataLists(sport) {
+  const opts = await fetch(`/api/${sport}/options`).then(r => r.json());
+  const fill = (id, values, defaults) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = (values?.length ? values : defaults).map(v => `<option value="${esc(v)}">`).join("");
+  };
+  if (sport === "wrestling") {
+    fill("bt-set-list",   opts.set_name,  ["Topps Chrome WWE 2026","Topps WWE 2025","Panini Prizm WWE 2024"]);
+    fill("bt-brand-list", opts.brand,     ["Raw","SmackDown","NXT","AEW"]);
+    fill("bt-type-list",  opts.card_type, ["Base","Refractor","Auto","Prizm","Patch","Rookie Auto"]);
+  } else {
+    fill("bt-set-list",    opts.set_name,  ["Donruss Road to World Cup 25-26","Topps Chrome UEFA 2025","Panini Prizm FIFA 2026"]);
+    fill("bt-league-list", opts.league,    ["International","Premier League","La Liga","MLS","Champions League"]);
+    fill("bt-type-list",   opts.card_type, ["Base","Refractor","Auto","Prizm","Patch","Rookie Auto"]);
+  }
+}
+
+function onBatchSportChange() {
+  const isWrestling = document.getElementById("bt-sport").value === "wrestling";
+  document.getElementById("bt-brand-col").classList.toggle("d-none", !isWrestling);
+  document.getElementById("bt-league-col").classList.toggle("d-none",  isWrestling);
+  document.getElementById("bt-name-header").textContent = isWrestling ? "Wrestler Name *" : "Player Name *";
+  _refreshBatchDataLists(isWrestling ? "wrestling" : "soccer");
+}
+
+function onBatchSourceChange() {
+  const isBox = boxSourceSelected(document.getElementById("bt-source").value);
+  document.getElementById("bt-box-col").classList.toggle("d-none", !isBox);
+}
+
+function addBatchRow() {
+  const tbody = document.getElementById("bt-tbody");
+  const count = tbody.querySelectorAll("tr").length;
+  if (count >= 20) return;
+
+  const id = ++batchRowId;
+  const rowNum = count + 1;
+  const tr = document.createElement("tr");
+  tr.id = `bt-row-${id}`;
+  tr.innerHTML = `
+    <td class="text-center text-muted small">${rowNum}</td>
+    <td><input type="text" class="form-control form-control-sm bt-name" placeholder="Name" autocomplete="off"></td>
+    <td><input type="text" class="form-control form-control-sm bt-cardnum" placeholder="e.g. 42"></td>
+    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bt-value" value="1.00"></td>
+    <td><button class="btn btn-xs btn-outline-danger" onclick="removeBatchRow(${id})" tabindex="-1"><i class="bi bi-x"></i></button></td>`;
+  tbody.appendChild(tr);
+  _updateBatchCount();
+
+  // Tab from last value field → add a new row (if under limit)
+  tr.querySelector(".bt-value").addEventListener("keydown", e => {
+    if (e.key === "Tab" && !e.shiftKey) {
+      const rows  = tbody.querySelectorAll("tr");
+      const isLast = tr === rows[rows.length - 1];
+      if (isLast && rows.length < 20) {
+        e.preventDefault();
+        addBatchRow();
+        setTimeout(() => tbody.lastElementChild.querySelector(".bt-name")?.focus(), 50);
+      }
+    }
+  });
+}
+
+function removeBatchRow(id) {
+  document.getElementById(`bt-row-${id}`)?.remove();
+  // Re-number remaining rows
+  document.querySelectorAll("#bt-tbody tr").forEach((tr, i) => {
+    tr.cells[0].textContent = i + 1;
+  });
+  _updateBatchCount();
+}
+
+function _updateBatchCount() {
+  const count = document.querySelectorAll("#bt-tbody tr").length;
+  document.getElementById("bt-count").textContent = count;
+  document.getElementById("bt-add-row").disabled  = count >= 20;
+}
+
+async function saveBatch() {
+  const sport      = document.getElementById("bt-sport").value;
+  const setName    = document.getElementById("bt-set").value.trim();
+  const brand      = document.getElementById("bt-brand").value.trim();
+  const league     = document.getElementById("bt-league").value.trim();
+  const cardType   = document.getElementById("bt-card-type").value.trim();
+  const source     = document.getElementById("bt-source").value;
+  const boxId      = boxSourceSelected(source) ? (document.getElementById("bt-box").value || null) : null;
+
+  // Collect non-empty rows
+  const rows = [];
+  document.querySelectorAll("#bt-tbody tr").forEach(tr => {
+    const name  = tr.querySelector(".bt-name").value.trim();
+    const num   = tr.querySelector(".bt-cardnum").value.trim();
+    const value = parseFloat(tr.querySelector(".bt-value").value) || 0;
+    if (name) rows.push({ name, num, value });
+  });
+
+  if (!rows.length) { alert("Enter at least one card name."); return; }
+
+  const btn    = document.getElementById("bt-save");
+  const status = document.getElementById("bt-status");
+  btn.disabled = true;
+
+  let saved = 0, failed = 0;
+  for (const [i, row] of rows.entries()) {
+    status.textContent = `Saving ${i + 1} of ${rows.length}…`;
+    const body = sport === "wrestling" ? {
+      wrestler_name: row.name, set_name: setName, brand,
+      card_type: cardType, card_number: row.num,
+      cost: 0, current_value: row.value,
+      quantity: 1, source, box_id: boxId || null, notes: "",
+    } : {
+      player_name: row.name, set_name: setName, league,
+      card_type: cardType, card_number: row.num,
+      cost: 0, current_value: row.value,
+      quantity: 1, source, box_id: boxId || null, notes: "",
+    };
+    try {
+      const res = await fetch(`/api/${sport}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) saved++; else failed++;
+    } catch { failed++; }
+  }
+
+  status.textContent = `Done — ${saved} saved${failed ? `, ${failed} failed` : ""}.`;
+  btn.disabled = false;
+
+  // Refresh inventory + nav stats
+  if (sport === "wrestling") loadWrestling();
+  else loadSoccer();
+  loadNavStats();
+
+  // Close after a moment so they can see the result
+  setTimeout(() => batchModal.hide(), 1200);
 }
 
 

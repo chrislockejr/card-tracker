@@ -20,7 +20,10 @@
 
 <nav class="navbar navbar-dark bg-dark px-3">
   <span class="navbar-brand fw-bold"><i class="bi bi-collection"></i> Card Tracker</span>
-  <div class="d-flex gap-2 align-items-center" id="nav-stats"></div>
+  <div class="d-flex gap-2 align-items-center">
+    <button class="btn btn-sm btn-outline-light" onclick="openBatchModal()"><i class="bi bi-lightning-fill"></i> Batch Add</button>
+    <div id="nav-stats"></div>
+  </div>
 </nav>
 
 <div class="container-fluid py-3">
@@ -980,6 +983,94 @@
           </div>
         </div>
         <div id="comps-error" class="d-none alert alert-danger"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Add Modal -->
+<div class="modal fade" id="batchModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-lightning-fill"></i> Batch Add Cards</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Shared fields -->
+        <div class="row g-2 mb-3 p-2 bg-light rounded border">
+          <div class="col-sm-2">
+            <label class="form-label fw-bold small">Sport</label>
+            <select class="form-select form-select-sm" id="bt-sport" onchange="onBatchSportChange()">
+              <option value="wrestling">Wrestling</option>
+              <option value="soccer">Soccer</option>
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label fw-bold small">Set</label>
+            <input class="form-control form-control-sm" id="bt-set" list="bt-set-list" placeholder="e.g. Topps Chrome WWE 2026">
+            <datalist id="bt-set-list"></datalist>
+          </div>
+          <div class="col-sm-2" id="bt-brand-col">
+            <label class="form-label fw-bold small">Brand</label>
+            <input class="form-control form-control-sm" id="bt-brand" list="bt-brand-list" placeholder="e.g. Raw">
+            <datalist id="bt-brand-list"></datalist>
+          </div>
+          <div class="col-sm-2 d-none" id="bt-league-col">
+            <label class="form-label fw-bold small">League</label>
+            <input class="form-control form-control-sm" id="bt-league" list="bt-league-list" placeholder="e.g. Premier League">
+            <datalist id="bt-league-list"></datalist>
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label fw-bold small">Card Type</label>
+            <input class="form-control form-control-sm" id="bt-card-type" list="bt-type-list" placeholder="e.g. Base, Auto">
+            <datalist id="bt-type-list"></datalist>
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label fw-bold small">Source</label>
+            <select class="form-select form-select-sm" id="bt-source" onchange="onBatchSourceChange()">
+              <option>Single</option>
+              <option>Blaster Box</option>
+              <option>Hobby Box</option>
+              <option>Retail Pack</option>
+              <option>Hanger Box</option>
+              <option>Mega Box</option>
+              <option>Collector Box</option>
+              <option>Trade</option>
+              <option>Gift</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="col-sm-3 d-none" id="bt-box-col">
+            <label class="form-label fw-bold small">Box</label>
+            <select class="form-select form-select-sm" id="bt-box"></select>
+          </div>
+        </div>
+        <!-- Row counter + add button -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small"><span id="bt-count">0</span> / 20 cards</span>
+          <button class="btn btn-sm btn-outline-primary" onclick="addBatchRow()" id="bt-add-row"><i class="bi bi-plus-lg"></i> Add Row</button>
+        </div>
+        <!-- Card rows -->
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th style="width:32px" class="text-center">#</th>
+                <th id="bt-name-header">Wrestler Name *</th>
+                <th style="width:110px">Card #</th>
+                <th style="width:105px">Value ($)</th>
+                <th style="width:32px"></th>
+              </tr>
+            </thead>
+            <tbody id="bt-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted small me-auto" id="bt-status"></span>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="bt-save" onclick="saveBatch()"><i class="bi bi-check-all"></i> Save All</button>
       </div>
     </div>
   </div>
