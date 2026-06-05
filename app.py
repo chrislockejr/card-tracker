@@ -1359,11 +1359,17 @@ def sell_bundle(bundle_id):
         )
         db.session.add(sale)
 
-        box_id         = card.box_id
-        card.status    = "sold"
-        card.bundle_id = None
-        db.session.flush()
-        redistribute_box_costs(box_id)
+        box_id = card.box_id
+        if (card.quantity or 1) > 1:
+            # More copies remain — sell one, keep the rest in inventory
+            card.quantity -= 1
+            card.bundle_id = None
+        else:
+            # Last copy — mark sold and redistribute box costs
+            card.status    = "sold"
+            card.bundle_id = None
+            db.session.flush()
+            redistribute_box_costs(box_id)
 
     b.status = "sold"
     db.session.commit()

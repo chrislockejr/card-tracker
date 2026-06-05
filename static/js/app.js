@@ -1638,9 +1638,12 @@ function renderBundleDetail(b) {
       const badge = c.label_type === "wrestling"
         ? `<span class="badge bg-danger">W</span>`
         : `<span class="badge bg-primary">S</span>`;
+      const qtyNote = c.quantity > 1
+        ? ` <span class="badge bg-warning text-dark" title="Only 1 of ${c.quantity} copies will be sold with this bundle">1 of ${c.quantity}</span>`
+        : "";
       return `<tr>
         <td>${badge}</td>
-        <td><strong>${esc(c.display_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}</td>
+        <td><strong>${esc(c.display_name)}</strong>${qtyNote}</td>
         <td>${esc(c.set_name)}</td>
         <td><small class="text-muted">${esc(c.display_detail)}</small></td>
         <td>${fmt(c.cost)}</td>
@@ -1716,6 +1719,38 @@ async function disbandBundle(id) {
 function disbandSelectedBundle() {
   disbandBundle(state.selectedBundleId);
 }
+
+// --- Packing slip ---
+
+function printPackingSlip() {
+  if (!state.selectedBundleId) return;
+  const b = state.bundles.find(x => x.id === state.selectedBundleId);
+  if (!b) return;
+
+  document.getElementById("ps-title").textContent  = b.name;
+  document.getElementById("ps-notes").textContent  = b.notes || "";
+  document.getElementById("ps-date").textContent   = new Date().toLocaleDateString();
+  document.getElementById("ps-count").textContent  = b.cards.length;
+
+  document.getElementById("ps-rows").innerHTML = b.cards.map((c, i) => `
+    <tr style="border-bottom:1px solid #eee;background:${i % 2 ? "#f9f9f9" : "#fff"}">
+      <td style="padding:6px 4px;">${esc(c.display_name)}${c.quantity > 1 ? ` (1 of ${c.quantity})` : ""}</td>
+      <td style="padding:6px 4px;">${esc(c.set_name)}</td>
+      <td style="padding:6px 4px;">${esc(c.display_detail)}</td>
+      <td style="padding:6px 4px;">${esc(c.card_number || "")}</td>
+      <td style="padding:6px 4px;text-align:right;">${fmt(c.current_value)}</td>
+    </tr>`).join("");
+
+  const pl = b.total_value - b.total_cost;
+  document.getElementById("ps-totals").innerHTML = `
+    <tr style="border-top:2px solid #000;font-weight:bold;">
+      <td colspan="4" style="padding:8px 4px;">Totals</td>
+      <td style="padding:8px 4px;text-align:right;">${fmt(b.total_value)}</td>
+    </tr>`;
+
+  window.print();
+}
+
 
 // --- Assign cards to bundle from inventory tabs ---
 

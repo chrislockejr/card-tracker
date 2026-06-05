@@ -8,6 +8,13 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/static/css/style.css">
+<style>
+@media print {
+  body > *                 { display: none !important; }
+  #packing-slip-printable  { display: block !important; }
+}
+#packing-slip-printable    { display: none; }
+</style>
 </head>
 <body>
 
@@ -176,6 +183,7 @@
           <span class="fw-bold" id="bundle-detail-title"></span>
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-success" onclick="openSellBundleModal()"><i class="bi bi-currency-dollar"></i> Sell Bundle</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="printPackingSlip()"><i class="bi bi-printer"></i> Packing Slip</button>
             <button class="btn btn-sm btn-outline-primary" onclick="openEditBundleModal()"><i class="bi bi-pencil"></i> Edit</button>
             <button class="btn btn-sm btn-outline-danger" onclick="disbandSelectedBundle()"><i class="bi bi-x-circle"></i> Disband</button>
           </div>
@@ -999,5 +1007,32 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/app.js"></script>
+
+<!-- Packing slip — only visible when printing -->
+<div id="packing-slip-printable" style="font-family:sans-serif;padding:32px;max-width:700px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:20px;">
+    <div>
+      <h2 style="margin:0;" id="ps-title"></h2>
+      <div style="color:#555;margin-top:4px;" id="ps-notes"></div>
+    </div>
+    <div style="text-align:right;color:#555;">
+      <div><strong>Date:</strong> <span id="ps-date"></span></div>
+      <div><strong>Cards:</strong> <span id="ps-count"></span></div>
+    </div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="border-bottom:1px solid #999;">
+        <th style="text-align:left;padding:6px 4px;">Name</th>
+        <th style="text-align:left;padding:6px 4px;">Set</th>
+        <th style="text-align:left;padding:6px 4px;">Type / Detail</th>
+        <th style="text-align:left;padding:6px 4px;">Card #</th>
+        <th style="text-align:right;padding:6px 4px;">Value</th>
+      </tr>
+    </thead>
+    <tbody id="ps-rows"></tbody>
+    <tfoot id="ps-totals"></tfoot>
+  </table>
+</div>
 </body>
 </html>
