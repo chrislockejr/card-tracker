@@ -2091,9 +2091,11 @@ async function _refreshBatchDataLists(sport) {
 
 function onBatchSportChange() {
   const isWrestling = document.getElementById("bt-sport").value === "wrestling";
-  document.getElementById("bt-brand-col").classList.toggle("d-none", !isWrestling);
-  document.getElementById("bt-league-col").classList.toggle("d-none",  isWrestling);
+  document.getElementById("bt-brand-col").classList.toggle("d-none",  !isWrestling);
+  document.getElementById("bt-league-col").classList.toggle("d-none",   isWrestling);
   document.getElementById("bt-name-header").textContent = isWrestling ? "Wrestler Name *" : "Player Name *";
+  document.getElementById("bt-team-header").classList.toggle("d-none",  isWrestling);
+  document.querySelectorAll(".bt-team-cell").forEach(el => el.classList.toggle("d-none", isWrestling));
   _refreshBatchDataLists(isWrestling ? "wrestling" : "soccer");
 }
 
@@ -2111,9 +2113,11 @@ function addBatchRow() {
   const rowNum = count + 1;
   const tr = document.createElement("tr");
   tr.id = `bt-row-${id}`;
+  const isSoccer = document.getElementById("bt-sport").value === "soccer";
   tr.innerHTML = `
     <td class="text-center text-muted small">${rowNum}</td>
     <td><input type="text" class="form-control form-control-sm bt-name" placeholder="Name" autocomplete="off"></td>
+    <td class="bt-team-cell${isSoccer ? "" : " d-none"}"><input type="text" class="form-control form-control-sm bt-team" placeholder="Team" autocomplete="off"></td>
     <td><input type="text" class="form-control form-control-sm bt-cardnum" placeholder="e.g. 42"></td>
     <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bt-value" value="1.00"></td>
     <td><button class="btn btn-xs btn-outline-danger" onclick="removeBatchRow(${id})" tabindex="-1"><i class="bi bi-x"></i></button></td>`;
@@ -2162,9 +2166,10 @@ async function saveBatch() {
   const rows = [];
   document.querySelectorAll("#bt-tbody tr").forEach(tr => {
     const name  = tr.querySelector(".bt-name").value.trim();
+    const team  = tr.querySelector(".bt-team")?.value.trim() || "";
     const num   = tr.querySelector(".bt-cardnum").value.trim();
     const value = parseFloat(tr.querySelector(".bt-value").value) || 0;
-    if (name) rows.push({ name, num, value });
+    if (name) rows.push({ name, team, num, value });
   });
 
   if (!rows.length) { alert("Enter at least one card name."); return; }
@@ -2182,7 +2187,7 @@ async function saveBatch() {
       cost: 0, current_value: row.value,
       quantity: 1, source, box_id: boxId || null, notes: "",
     } : {
-      player_name: row.name, set_name: setName, league,
+      player_name: row.name, set_name: setName, team: row.team, league,
       card_type: cardType, card_number: row.num,
       cost: 0, current_value: row.value,
       quantity: 1, source, box_id: boxId || null, notes: "",
