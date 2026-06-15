@@ -95,6 +95,9 @@ function setupTabs() {
 function switchTab(tab) {
   state.currentTab = tab;
 
+  // Keep mobile select in sync
+  document.getElementById("tab-select").value = tab;
+
   // Update nav link active state
   document.querySelectorAll("[data-tab]").forEach(el => {
     el.classList.toggle("active", el.dataset.tab === tab);

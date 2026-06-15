@@ -28,8 +28,18 @@
 
 <div class="container-fluid py-3">
 
-  <!-- Tabs -->
-  <ul class="nav nav-tabs mb-3" id="mainTabs">
+  <!-- Tabs — dropdown on mobile, tab bar on sm+ -->
+  <select id="tab-select" class="form-select form-select-sm d-sm-none mb-3" onchange="switchTab(this.value)">
+    <option value="wrestling">Wrestling</option>
+    <option value="soccer">Soccer</option>
+    <option value="sold">Sold</option>
+    <option value="bundles">Bundles</option>
+    <option value="breaks">Breaks</option>
+    <option value="prices">Prices</option>
+    <option value="portfolio">Portfolio</option>
+    <option value="admin">⚙ Admin</option>
+  </select>
+  <ul class="nav nav-tabs mb-3 d-none d-sm-flex" id="mainTabs">
     <li class="nav-item"><a class="nav-link active" href="#" data-tab="wrestling">Wrestling</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="soccer">Soccer</a></li>
     <li class="nav-item"><a class="nav-link" href="#" data-tab="sold">Sold</a></li>
