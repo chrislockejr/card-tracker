@@ -35,5 +35,5 @@ body { background: #f8f9fa; font-size: 0.875rem; }
 
 @media (max-width: 575px) {
   .navbar { flex-wrap: wrap; row-gap: 0.4rem; }
-  .action-btns { display: flex; flex-wrap: wrap; gap: 2px; }
+  .action-btns { display: flex; flex-wrap: wrap; gap: 2px; width: 68px; flex-shrink: 0; }
 }
