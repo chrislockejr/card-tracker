@@ -28,3 +28,12 @@ body { background: #f8f9fa; font-size: 0.875rem; }
 .cursor-pointer:hover { background: rgba(13,110,253,0.05); }
 
 .break-boxes-cell { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Mobile layout */
+#mainTabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#mainTabs .nav-link { white-space: nowrap; }
+
+@media (max-width: 575px) {
+  .navbar { flex-wrap: wrap; row-gap: 0.4rem; }
+  .action-btns { display: flex; flex-wrap: wrap; gap: 2px; }
+}

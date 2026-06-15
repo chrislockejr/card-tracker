@@ -881,20 +881,20 @@ function renderWrestlingTable(data) {
     return `<tr>
       <td><input type="checkbox" class="form-check-input" ${isChecked ? "checked" : ""} onchange="onCardCheck('wrestling',${c.id},this.checked)"></td>
       <td><strong>${esc(c.wrestler_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}${bundleBadge}</td>
-      <td>${esc(c.set_name)}</td>
-      <td>${esc(c.brand)}</td>
+      <td class="d-none d-md-table-cell">${esc(c.set_name)}</td>
+      <td class="d-none d-md-table-cell">${esc(c.brand)}</td>
       <td>${esc(c.card_type)}</td>
-      <td>${esc(c.card_number)}</td>
-      <td>${fmt(c.cost)}</td>
+      <td class="d-none d-sm-table-cell">${esc(c.card_number)}</td>
+      <td class="d-none d-sm-table-cell">${fmt(c.cost)}</td>
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
-      <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
+      <td class="notes-cell d-none d-md-table-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('wrestling',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('wrestling',${c.id},'${esc(c.wrestler_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
-        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
+        <button class="btn btn-xs btn-outline-info me-1 d-none d-md-inline-flex"    onclick="showHistory('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="Value History"><i class="bi bi-graph-up"></i></button>
         <button class="btn btn-xs btn-outline-secondary me-1" onclick="showComps('wrestling',${c.id},'${esc(c.wrestler_name)}')" title="eBay Comps"><i class="bi bi-tags"></i></button>
-        <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
-        <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
+        <a      class="btn btn-xs btn-outline-warning me-1 d-none d-md-inline-flex" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
+        <a      class="btn btn-xs btn-outline-success me-1 d-none d-md-inline-flex" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
         <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('wrestling',${c.id})"                           title="Delete"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
@@ -939,21 +939,21 @@ function renderSoccerTable(data) {
     return `<tr>
       <td><input type="checkbox" class="form-check-input" ${isChecked ? "checked" : ""} onchange="onCardCheck('soccer',${c.id},this.checked)"></td>
       <td><strong>${esc(c.player_name)}</strong>${c.quantity > 1 ? ` <span class="badge bg-info text-dark">×${c.quantity}</span>` : ""}${bundleBadge}</td>
-      <td>${esc(c.set_name)}</td>
-      <td>${esc(c.team)}</td>
-      <td>${esc(c.league)}</td>
+      <td class="d-none d-md-table-cell">${esc(c.set_name)}</td>
+      <td class="d-none d-sm-table-cell">${esc(c.team)}</td>
+      <td class="d-none d-md-table-cell">${esc(c.league)}</td>
       <td>${esc(c.card_type)}</td>
-      <td>${esc(c.card_number)}</td>
-      <td>${fmt(c.cost)}</td>
+      <td class="d-none d-sm-table-cell">${esc(c.card_number)}</td>
+      <td class="d-none d-sm-table-cell">${fmt(c.cost)}</td>
       <td>${fmt(c.current_value)} <small class="${gainClass}">${gainStr}</small></td>
-      <td class="notes-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
+      <td class="notes-cell d-none d-md-table-cell" title="${esc(c.notes)}">${esc(c.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditModal('soccer',${c.id})"                         title="Edit"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-xs btn-outline-success me-1" onclick="openSellModal('soccer',${c.id},'${esc(c.player_name)}',${c.quantity})" title="Mark Sold"><i class="bi bi-currency-dollar"></i></button>
-        <button class="btn btn-xs btn-outline-info me-1"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')"   title="Value History"><i class="bi bi-graph-up"></i></button>
+        <button class="btn btn-xs btn-outline-info me-1 d-none d-md-inline-flex"    onclick="showHistory('soccer',${c.id},'${esc(c.player_name)}')"   title="Value History"><i class="bi bi-graph-up"></i></button>
         <button class="btn btn-xs btn-outline-secondary me-1" onclick="showComps('soccer',${c.id},'${esc(c.player_name)}')"   title="eBay Comps"><i class="bi bi-tags"></i></button>
-        <a      class="btn btn-xs btn-outline-warning me-1" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
-        <a      class="btn btn-xs btn-outline-success me-1" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
+        <a      class="btn btn-xs btn-outline-warning me-1 d-none d-md-inline-flex" href="https://www.ebay.com/sch/i.html?_nkw=${ebayQ}" target="_blank" title="eBay Search"><i class="bi bi-bag"></i></a>
+        <a      class="btn btn-xs btn-outline-success me-1 d-none d-md-inline-flex" href="${researchUrl}"                                 target="_blank" title="eBay Sold Research"><i class="bi bi-bar-chart"></i></a>
         <button class="btn btn-xs btn-outline-danger"       onclick="deleteCard('soccer',${c.id})"                            title="Delete"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
@@ -1468,17 +1468,17 @@ function renderSoldTable(data) {
       ? ` <span class="badge bg-warning text-dark" title="Bundle: ${esc(s.bundle_name)}"><i class="bi bi-collection"></i> ${esc(s.bundle_name)}</span>`
       : "";
     return `<tr>
-      <td>${badge}</td>
+      <td class="d-none d-sm-table-cell">${badge}</td>
       <td><strong>${esc(s.name)}</strong>${bundleBadge}</td>
-      <td>${esc(s.set_name)}</td>
-      <td><small class="text-muted">${esc(s.card_detail)}${s.card_number ? " #"+esc(s.card_number) : ""}</small></td>
-      <td>${esc(s.sold_date)}</td>
-      <td>${esc(s.platform)}</td>
-      <td>${fmt(s.cost)}</td>
-      <td>${fmt(s.sold_price)}</td>
-      <td>${fmt(s.fees)}</td>
+      <td class="d-none d-md-table-cell">${esc(s.set_name)}</td>
+      <td class="d-none d-md-table-cell"><small class="text-muted">${esc(s.card_detail)}${s.card_number ? " #"+esc(s.card_number) : ""}</small></td>
+      <td class="d-none d-sm-table-cell">${esc(s.sold_date)}</td>
+      <td class="d-none d-md-table-cell">${esc(s.platform)}</td>
+      <td class="d-none d-md-table-cell">${fmt(s.cost)}</td>
+      <td class="d-none d-sm-table-cell">${fmt(s.sold_price)}</td>
+      <td class="d-none d-md-table-cell">${fmt(s.fees)}</td>
       <td class="${plClass}"><strong>${plStr}</strong></td>
-      <td class="notes-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
+      <td class="notes-cell d-none d-md-table-cell" title="${esc(s.notes)}">${esc(s.notes)}</td>
       <td class="action-btns">
         <button class="btn btn-xs btn-outline-secondary" onclick="unarchiveSale(${s.id})" title="Unarchive (restore to inventory)"><i class="bi bi-arrow-counterclockwise"></i></button>
       </td>

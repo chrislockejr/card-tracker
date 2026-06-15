@@ -22,7 +22,7 @@
   <span class="navbar-brand fw-bold"><i class="bi bi-collection"></i> Card Tracker</span>
   <div class="d-flex gap-2 align-items-center">
     <button class="btn btn-sm btn-outline-light" onclick="openBatchModal()"><i class="bi bi-lightning-fill"></i> Batch Add</button>
-    <div id="nav-stats"></div>
+    <div id="nav-stats" class="d-none d-sm-flex gap-2"></div>
   </div>
 </nav>
 
@@ -43,11 +43,11 @@
   <!-- Wrestling Tab -->
   <div id="tab-wrestling">
     <div class="row g-2 mb-3 align-items-end">
-      <div class="col-sm-3"><input class="form-control form-control-sm" id="w-search" placeholder="Search wrestler..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-set" placeholder="Filter set..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-brand" placeholder="Filter brand..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="w-filter-type" placeholder="Filter card type..."></div>
-      <div class="col-sm-auto d-flex gap-1 flex-wrap">
+      <div class="col-6 col-sm-3"><input class="form-control form-control-sm" id="w-search" placeholder="Search wrestler..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="w-filter-set" placeholder="Filter set..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="w-filter-brand" placeholder="Filter brand..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="w-filter-type" placeholder="Filter card type..."></div>
+      <div class="col-12 col-sm-auto d-flex gap-1 flex-wrap">
         <button class="btn btn-sm btn-primary" onclick="openAddModal('wrestling')"><i class="bi bi-plus-lg"></i> Add Card</button>
         <button class="btn btn-sm btn-success" onclick="exportCSV('wrestling')"><i class="bi bi-download"></i> Export CSV</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="openImport('wrestling')"><i class="bi bi-upload"></i> Import CSV</button>
@@ -63,13 +63,13 @@
           <tr>
             <th style="width:32px"><input type="checkbox" class="form-check-input" id="w-select-all" onchange="selectAllCards('wrestling', this.checked)" title="Select all"></th>
             <th class="sortable" data-col="wrestler_name" data-tab="wrestling">Wrestler <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="set_name" data-tab="wrestling">Set <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="brand" data-tab="wrestling">Brand <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="card_type" data-tab="wrestling">Card Type <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="card_number" data-tab="wrestling">Card # <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="cost" data-tab="wrestling">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="set_name" data-tab="wrestling">Set <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="brand" data-tab="wrestling">Brand <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_type" data-tab="wrestling">Type <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="card_number" data-tab="wrestling">Card # <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="cost" data-tab="wrestling">Cost <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="current_value" data-tab="wrestling">Value <i class="bi bi-arrow-down-up"></i></th>
-            <th>Notes</th>
+            <th class="d-none d-md-table-cell">Notes</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -82,11 +82,11 @@
   <!-- Soccer Tab -->
   <div id="tab-soccer" class="d-none">
     <div class="row g-2 mb-3 align-items-end">
-      <div class="col-sm-3"><input class="form-control form-control-sm" id="s-search" placeholder="Search player..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-set" placeholder="Filter set..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-team" placeholder="Filter team..."></div>
-      <div class="col-sm-2"><input class="form-control form-control-sm" id="s-filter-type" placeholder="Filter card type..."></div>
-      <div class="col-sm-auto d-flex gap-1 flex-wrap">
+      <div class="col-6 col-sm-3"><input class="form-control form-control-sm" id="s-search" placeholder="Search player..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="s-filter-set" placeholder="Filter set..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="s-filter-team" placeholder="Filter team..."></div>
+      <div class="col-6 col-sm-2"><input class="form-control form-control-sm" id="s-filter-type" placeholder="Filter card type..."></div>
+      <div class="col-12 col-sm-auto d-flex gap-1 flex-wrap">
         <button class="btn btn-sm btn-primary" onclick="openAddModal('soccer')"><i class="bi bi-plus-lg"></i> Add Card</button>
         <button class="btn btn-sm btn-success" onclick="exportCSV('soccer')"><i class="bi bi-download"></i> Export CSV</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="openImport('soccer')"><i class="bi bi-upload"></i> Import CSV</button>
@@ -102,14 +102,14 @@
           <tr>
             <th style="width:32px"><input type="checkbox" class="form-check-input" id="s-select-all" onchange="selectAllCards('soccer', this.checked)" title="Select all"></th>
             <th class="sortable" data-col="player_name" data-tab="soccer">Player <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="set_name" data-tab="soccer">Set <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="team" data-tab="soccer">Team <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="league" data-tab="soccer">League <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="card_type" data-tab="soccer">Card Type <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="card_number" data-tab="soccer">Card # <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="cost" data-tab="soccer">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="set_name" data-tab="soccer">Set <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="team" data-tab="soccer">Team <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="league" data-tab="soccer">League <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable" data-col="card_type" data-tab="soccer">Type <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="card_number" data-tab="soccer">Card # <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="cost" data-tab="soccer">Cost <i class="bi bi-arrow-down-up"></i></th>
             <th class="sortable" data-col="current_value" data-tab="soccer">Value <i class="bi bi-arrow-down-up"></i></th>
-            <th>Notes</th>
+            <th class="d-none d-md-table-cell">Notes</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -122,8 +122,8 @@
   <!-- Sold Tab -->
   <div id="tab-sold" class="d-none">
     <div class="row g-2 mb-3 align-items-end">
-      <div class="col-sm-3"><input class="form-control form-control-sm" id="sold-search" placeholder="Search name..."></div>
-      <div class="col-sm-2">
+      <div class="col-6 col-sm-3"><input class="form-control form-control-sm" id="sold-search" placeholder="Search name..."></div>
+      <div class="col-6 col-sm-2">
         <select class="form-select form-select-sm" id="sold-filter-type">
           <option value="">All types</option>
           <option value="wrestling">Wrestling</option>
@@ -136,17 +136,17 @@
       <table class="table table-sm table-hover table-striped align-middle" id="sold-table">
         <thead class="table-dark sticky-top">
           <tr>
-            <th>Type</th>
+            <th class="d-none d-sm-table-cell">Type</th>
             <th class="sortable" data-col="name" data-tab="sold">Name <i class="bi bi-arrow-down-up"></i></th>
-            <th>Set</th>
-            <th>Detail</th>
-            <th class="sortable" data-col="sold_date" data-tab="sold">Date <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="platform" data-tab="sold">Platform <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="cost" data-tab="sold">Cost <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="sold_price" data-tab="sold">Sold <i class="bi bi-arrow-down-up"></i></th>
-            <th class="sortable" data-col="fees" data-tab="sold">Fees <i class="bi bi-arrow-down-up"></i></th>
+            <th class="d-none d-md-table-cell">Set</th>
+            <th class="d-none d-md-table-cell">Detail</th>
+            <th class="sortable d-none d-sm-table-cell" data-col="sold_date" data-tab="sold">Date <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="platform" data-tab="sold">Platform <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="cost" data-tab="sold">Cost <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-sm-table-cell" data-col="sold_price" data-tab="sold">Sold <i class="bi bi-arrow-down-up"></i></th>
+            <th class="sortable d-none d-md-table-cell" data-col="fees" data-tab="sold">Fees <i class="bi bi-arrow-down-up"></i></th>
             <th>Net Profit</th>
-            <th>Notes</th>
+            <th class="d-none d-md-table-cell">Notes</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -435,7 +435,7 @@
 
 <!-- Add/Edit Modal -->
 <div class="modal fade" id="cardModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="modalTitle">Add Card</h5>
@@ -452,7 +452,7 @@
 
 <!-- Value History Modal -->
 <div class="modal fade" id="historyModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="historyTitle">Value History</h5>
@@ -467,7 +467,7 @@
 
 <!-- Box Modal -->
 <div class="modal fade" id="boxModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="boxModalTitle">Log Box Purchase</h5>
@@ -517,7 +517,7 @@
 
 <!-- New/Edit Break Modal -->
 <div class="modal fade" id="breakModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="breakModalTitle">New Break</h5>
@@ -567,7 +567,7 @@
 
 <!-- Add/Edit Slot Modal -->
 <div class="modal fade" id="slotModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="slotModalTitle">Add Slot</h5>
@@ -615,7 +615,7 @@
 
 <!-- Add/Edit Box Product Modal -->
 <div class="modal fade" id="productModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="productModalTitle">Add Box</h5>
@@ -656,7 +656,7 @@
 
 <!-- Log Price Modal -->
 <div class="modal fade" id="priceModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Log Price</h5>
@@ -706,7 +706,7 @@
 
 <!-- Expense Modal -->
 <div class="modal fade" id="expenseModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="expenseModalTitle">Log Expense</h5>
@@ -756,7 +756,7 @@
 
 <!-- Mark as Sold Modal -->
 <div class="modal fade" id="sellModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="sellModalTitle">Mark as Sold</h5>
@@ -808,7 +808,7 @@
 
 <!-- Create/Edit Bundle Modal -->
 <div class="modal fade" id="createBundleModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="createBundleTitle">New Bundle</h5>
@@ -836,7 +836,7 @@
 
 <!-- Assign Cards to Bundle Modal -->
 <div class="modal fade" id="bundleAssignModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="bundleAssignTitle">Add to Bundle</h5>
@@ -880,7 +880,7 @@
 
 <!-- Sell Bundle Modal -->
 <div class="modal fade" id="sellBundleModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="sellBundleTitle">Sell Bundle</h5>
@@ -934,7 +934,7 @@
 
 <!-- eBay Comps Modal -->
 <div class="modal fade" id="compsModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <div>
@@ -990,7 +990,7 @@
 
 <!-- Batch Add Modal -->
 <div class="modal fade" id="batchModal" tabindex="-1">
-  <div class="modal-dialog modal-xl">
+  <div class="modal-dialog modal-xl modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-lightning-fill"></i> Batch Add Cards</h5>
@@ -1080,7 +1080,7 @@
 
 <!-- Import Modal -->
 <div class="modal fade" id="importModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-fullscreen-sm-down">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Import CSV</h5>
